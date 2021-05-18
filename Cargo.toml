@@ -1,0 +1,12 @@
+[package]
+name = "vcl-local"
+version = "0.1.0"
+authors = ["Jake Champion <me@jakechampion.name"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+clap = "2.33"
+derive_builder = "0.10.2"
+hexponent = "0.3.1"
