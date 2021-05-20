@@ -235,7 +235,7 @@ pub struct BinaryOp {
 #[derive(Debug, Clone)]
 pub enum Literal {
     Float(f64),
-    Integer(u64),
+    Integer(i64),
     String(String),
     True,
     False,

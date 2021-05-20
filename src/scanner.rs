@@ -14,7 +14,6 @@ pub enum TokenType {
     RightBracket,
     Comma,
     Dot,
-    Minus,
     Plus,
     Semicolon,
     Colon,
@@ -93,7 +92,7 @@ pub enum Literal {
     Identifier(String),
     Str(String),
     Float(f64),
-    Integer(u64),
+    Integer(i64),
     Duration(f64, DurationUnit),
     AclEntry(String, u8),
 }
@@ -247,8 +246,8 @@ impl Scanner {
             '-' => {
                 if self.matches('=') {
                     self.add_token(TokenType::Subtraction)
-                } else {
-                    self.add_token(TokenType::Minus)
+                } else if Scanner::is_decimal_digit(self.peek()) {
+                    self.number_or_duration()
                 }
             }
             '%' => {
@@ -374,9 +373,7 @@ impl Scanner {
                 self.string_or_acl()
             }
             _ => {
-                if Scanner::is_decimal_digit(c)
-                    || (c == '-' && Scanner::is_decimal_digit(self.peek()))
-                {
+                if Scanner::is_decimal_digit(c) {
                     self.number_or_duration()
                 } else if Scanner::is_alpha(c) {
                     if let Some(token) = self.tokens.last() {
@@ -496,6 +493,12 @@ impl Scanner {
     }
 
     fn number_or_duration(&mut self) {
+        let is_neg = self.previous() == '-';
+        println!("self.previous(): {}", self.previous());
+        println!("is_neg: {}", is_neg);
+        if is_neg {
+            self.advance();
+        }
         let is_hex = self.previous() == '0' && self.peek() == 'x';
         if is_hex {
             self.advance();
@@ -597,9 +600,14 @@ impl Scanner {
             self.add_token_literal(TokenType::Float, Some(Literal::Float(num)))
         } else {
             let num = if is_hex {
-                u64::from_str_radix(&int_lit.trim_start_matches("0x"), 16).unwrap()
+                let hex_without_suffix = if is_neg {
+                    format!("-{}", int_lit.trim_start_matches("-0x"))
+                } else {
+                    int_lit.trim_start_matches("0x").to_string()
+                };
+                i64::from_str_radix(&hex_without_suffix, 16).unwrap()
             } else {
-                int_lit.parse::<u64>().unwrap()
+                int_lit.parse::<i64>().unwrap()
             };
             self.add_token_literal(TokenType::Integer, Some(Literal::Integer(num)))
         }
@@ -926,23 +934,44 @@ mod tests {
             ]
         );
 
-        let tokens = scan_tokens("-".to_owned()).unwrap();
+        let tokens = scan_tokens("-9223372036854775808".to_owned()).unwrap();
         assert_eq!(
             tokens,
             vec![
                 Token {
-                    ty: TokenType::Minus,
-                    lexeme: "-".as_bytes().to_vec(),
-                    literal: None,
+                    ty: TokenType::Integer,
+                    lexeme: "-9223372036854775808".as_bytes().to_vec(),
+                    literal: Some(Literal::Integer(-9223372036854775808)),
                     line: 1,
-                    col: 0,
+                    col: 19,
                 },
                 Token {
                     ty: TokenType::Eof,
                     lexeme: "".as_bytes().to_vec(),
                     literal: None,
                     line: 1,
-                    col: 0
+                    col: 19
+                }
+            ]
+        );
+
+        let tokens = scan_tokens("-0x8000000000000000".to_owned()).unwrap();
+        assert_eq!(
+            tokens,
+            vec![
+                Token {
+                    ty: TokenType::Integer,
+                    lexeme: "-0x8000000000000000".as_bytes().to_vec(),
+                    literal: Some(Literal::Integer(-9223372036854775808)),
+                    line: 1,
+                    col: 18,
+                },
+                Token {
+                    ty: TokenType::Eof,
+                    lexeme: "".as_bytes().to_vec(),
+                    literal: None,
+                    line: 1,
+                    col: 18
                 }
             ]
         );
