@@ -9,6 +9,20 @@ pub enum Expr {
     Grouping(Box<Expr>),
     Variable(Symbol),
     Assign(Box<Expr>, Box<Expr>),
+    Addition(Box<Expr>, Box<Expr>),
+    Subtraction(Box<Expr>, Box<Expr>),
+    Multiplication(Box<Expr>, Box<Expr>),
+    Division(Box<Expr>, Box<Expr>),
+    Modulus(Box<Expr>, Box<Expr>),
+    BitwiseOr(Box<Expr>, Box<Expr>),
+    BitwiseAnd(Box<Expr>, Box<Expr>),
+    BitwiseXor(Box<Expr>, Box<Expr>),
+    LeftShift(Box<Expr>, Box<Expr>),
+    RightShift(Box<Expr>, Box<Expr>),
+    LeftRotate(Box<Expr>, Box<Expr>),
+    RightRotate(Box<Expr>, Box<Expr>),
+    LogicalAnd(Box<Expr>, Box<Expr>),
+    LogicalOr(Box<Expr>, Box<Expr>),
     Logical(Box<Expr>, LogicalOp, Box<Expr>),
     Set(Box<Expr>, Symbol, Box<Expr>),
     List(Vec<Expr>),
@@ -196,7 +210,6 @@ pub enum Stmt {
 
 #[derive(Debug, Copy, Clone)]
 pub enum UnaryOpTy {
-    Minus,
     Bang,
 }
 
@@ -216,11 +229,6 @@ pub enum BinaryOpTy {
     Greater,
     GreaterEqual,
     Plus,
-    Minus,
-    Multiplication,
-    Subtraction,
-    Addition,
-    Division,
     Match,
     NotMatch,
 }

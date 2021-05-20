@@ -767,10 +767,7 @@ impl Parser {
                     self.advance();
                 }
 
-                Ok(expr::TableEntry {
-                    key,
-                    value,
-                })
+                Ok(expr::TableEntry { key, value })
             } else {
                 return Err(Error::TokenMismatch {
                     expected: scanner::TokenType::String,
@@ -1006,18 +1003,43 @@ impl Parser {
     fn assignment(&mut self) -> Result<expr::Expr, Error> {
         let expr = self.or()?;
 
-        if self.matches(scanner::TokenType::Equal) {
-            let equals = self.previous().clone();
+        if self.match_one_of(vec![
+            scanner::TokenType::Equal,
+            scanner::TokenType::Subtraction,
+            scanner::TokenType::Addition,
+        ]) {
+            let token = self.previous().clone();
+            let assignment_type = match token.ty {
+                scanner::TokenType::Equal => expr::Expr::Assign,
+                scanner::TokenType::Addition => expr::Expr::Addition,
+                scanner::TokenType::Subtraction => expr::Expr::Subtraction,
+                scanner::TokenType::Multiplication => expr::Expr::Multiplication,
+                scanner::TokenType::Division => expr::Expr::Division,
+                scanner::TokenType::Modulus => expr::Expr::Modulus,
+                scanner::TokenType::BitwiseOr => expr::Expr::BitwiseOr,
+                scanner::TokenType::BitwiseAnd => expr::Expr::BitwiseAnd,
+                scanner::TokenType::BitwiseXor => expr::Expr::BitwiseXor,
+                scanner::TokenType::LeftShift => expr::Expr::LeftShift,
+                scanner::TokenType::RightShift => expr::Expr::RightShift,
+                scanner::TokenType::LeftRotate => expr::Expr::LeftRotate,
+                scanner::TokenType::RightRotate => expr::Expr::RightRotate,
+                scanner::TokenType::LogicalAnd => expr::Expr::LogicalAnd,
+                scanner::TokenType::LogicalOr => expr::Expr::LogicalOr,
+                _ => unreachable!(
+                    "Reached a token in assignment that should not be reachable: {:?}",
+                    token.ty
+                ),
+            };
             let value = self.assignment()?;
 
             match expr {
                 expr::Expr::Get(_, _) | expr::Expr::Variable(_) => {
-                    return Ok(expr::Expr::Assign(Box::new(expr), Box::new(value)));
+                    return Ok(assignment_type(Box::new(expr), Box::new(value)));
                 }
                 _ => {
                     return Err(Error::InvalidAssignment {
-                        line: equals.line,
-                        col: equals.col,
+                        line: token.line,
+                        col: token.col,
                     });
                 }
             }
@@ -1076,13 +1098,19 @@ impl Parser {
         let mut expr = self.multiplication()?;
 
         while self.match_one_of(vec![
-            scanner::TokenType::Subtraction,
-            scanner::TokenType::Addition,
             scanner::TokenType::Plus,
             scanner::TokenType::String,
         ]) {
+            println!("expr: {:?}", expr);
+            println!("previous: {:?}", self.previous());
+            println!("current: {:?}", self.peek());
             let operator_token = self.previous().clone();
-            let right = Box::new(self.multiplication()?);
+            let right = if operator_token.ty == scanner::TokenType::String {
+                Box::new(self.string(&operator_token)?)
+            } else {
+                Box::new(self.multiplication()?)
+            };
+            // let right = Box::new(self.multiplication()?);
             let binop_maybe = Parser::op_token_to_binop(&operator_token);
 
             match binop_maybe {
@@ -1090,7 +1118,13 @@ impl Parser {
                     let left = Box::new(expr);
                     expr = expr::Expr::Binary(left, binop, right);
                 }
-                Err(err) => return Err(err),
+                Err(err) => {
+                    println!("current: {:?}", self.peek());
+                    if self.check(scanner::TokenType::Semicolon) {
+                        return Ok(expr);
+                    }
+                    return Err(err)
+                },
             }
         }
         Ok(expr)
@@ -1273,16 +1307,7 @@ impl Parser {
             }
         }
         if self.matches(scanner::TokenType::String) {
-            match &self.previous().literal {
-                Some(scanner::Literal::Str(s)) => {
-                    return Ok(expr::Expr::Literal(expr::Literal::String(s.clone())))
-                }
-                Some(l) => panic!(
-                    "internal error in parser: when parsing string, found literal {:?}",
-                    l
-                ),
-                None => panic!("internal error in parser: when parsing string, found no literal"),
-            }
+            return self.string(self.previous());
         }
         if self.matches(scanner::TokenType::Identifier) {
             let token = self.previous().clone();
@@ -1385,6 +1410,19 @@ impl Parser {
             line: self.peek().line,
             col: self.peek().col,
         })
+    }
+
+    fn string(&self, token: &scanner::Token) -> Result<expr::Expr, Error> {
+        match &token.literal {
+            Some(scanner::Literal::Str(s)) => {
+                Ok(expr::Expr::Literal(expr::Literal::String(s.clone())))
+            }
+            Some(l) => panic!(
+                "internal error in parser: when parsing string, found literal {:?}",
+                l
+            ),
+            None => panic!("internal error in parser: when parsing string, found no literal"),
+        }
     }
 
     fn consume(
@@ -1512,27 +1550,6 @@ impl Parser {
             }),
             scanner::TokenType::String => Ok(expr::BinaryOp {
                 ty: expr::BinaryOpTy::Plus,
-                line: tok.line,
-                col: tok.col,
-            }),
-            scanner::TokenType::Subtraction => Ok(expr::BinaryOp {
-                ty: expr::BinaryOpTy::Subtraction,
-                line: tok.line,
-                col: tok.col,
-            }),
-
-            scanner::TokenType::Addition => Ok(expr::BinaryOp {
-                ty: expr::BinaryOpTy::Addition,
-                line: tok.line,
-                col: tok.col,
-            }),
-            scanner::TokenType::Multiplication => Ok(expr::BinaryOp {
-                ty: expr::BinaryOpTy::Multiplication,
-                line: tok.line,
-                col: tok.col,
-            }),
-            scanner::TokenType::Division => Ok(expr::BinaryOp {
-                ty: expr::BinaryOpTy::Division,
                 line: tok.line,
                 col: tok.col,
             }),
