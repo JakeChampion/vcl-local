@@ -1,0 +1,1 @@
+set client.identity = req.http.cookie:user_id;

@@ -7,6 +7,7 @@ struct Parser {
     tokens: Vec<scanner::Token>,
     current: usize,
     in_subdec: bool,
+    statements: Vec<expr::Stmt>
 }
 
 impl Default for Parser {
@@ -15,6 +16,7 @@ impl Default for Parser {
             tokens: Vec::new(),
             current: 0,
             in_subdec: false,
+            statements: Vec::new(),
         }
     }
 }
@@ -184,75 +186,16 @@ pub fn parse(tokens: Vec<scanner::Token>) -> Result<Vec<expr::Stmt>, Error> {
     }
 }
 
-/*
-Recursive descent using the following grammar
-
-program     → declaration* EOF ;
-
-declaration → classDecl
-            | SubDecl
-            | varDecl
-            | statement ;
-
-SubDecl  → "sub" subroutine ;
-subroutine → IDENTIFIER "(" parameters? ")" block ;
-parameters  → IDENTIFIER ( "," IDENTIFIER )* ;
-
-statement → exprStmt
-          | forStmt
-          | ifStmt
-          | printStmt
-          | returnStmt
-          | whileStmt
-          | block ;
-
-returnStmt → "return" expression? ";" ;
-
-forStmt   → "for" "(" ( varDecl | exprStmt | ";" )
-                      expression? ";"
-                      expression? ")" statement ;
-
-whileStmt → "while" "(" expression ")" statement ;
-
-ifStmt    → "if" "(" expression ")" statement ( "else" statement )? ;
-
-block     → "{" declaration* "}" ;
-
-varDecl → "var" IDENTIFIER ( "=" expression )? ";" ;
-
-exprStmt  → expression ";" ;
-printStmt → "print" expression ";" ;
-
-expression → assignment ;
-assignment → ( call "." )? IDENTIFIER "=" assignment
-           | logic_or;
-logic_or   → logic_and ( "or" logic_and )* ;
-logic_and  → equality ( "and" equality )* ;
-
-equality       → comparison ( ( "!=" | "==" ) comparison )* ;
-comparison     → addition ( ( ">" | ">=" | "<" | "<=" ) addition )* ;
-addition       → multiplication ( ( "-" | "+" ) multiplication )* ;
-multiplication → unary ( ( "/" | "*" ) unary )* ;
-unary → ( "!" | "-" ) unary | call ;
-call → primary ( "(" arguments? ")" | "." IDENTIFIER )* ;
-arguments → expression ( "," expression )* ;
-
-primary → "true" | "false" | "nil" | "this"
-        | NUMBER | STRING | IDENTIFIER | "(" expression ")"
-        | "super" "." IDENTIFIER
-        | "[" arguments? "]" ;
-
-*/
 impl Parser {
     pub fn parse(&mut self) -> Result<Vec<expr::Stmt>, Error> {
-        let mut statements = Vec::new();
+        // let mut statements: Vec<expr::Stmt> = Vec::new();
 
         while !self.is_at_end() {
             let stmt = self.declaration()?;
-            statements.push(stmt);
+            self.statements.push(stmt);
         }
 
-        Ok(statements)
+        Ok(self.statements.clone())
     }
 
     fn declaration(&mut self) -> Result<expr::Stmt, Error> {
@@ -1402,6 +1345,45 @@ impl Parser {
                 Box::new(cond),
                 Box::new(then),
                 Box::new(else_branch),
+            ));
+        }
+        if self.matches(scanner::TokenType::Colon) {
+            let prev = self.statements.pop().unwrap();
+            let prev = match prev {
+                expr::Stmt::Expr(e) => {e}
+                _ => {
+                    panic!("internal error in parser: can only use subfield accessor on expressions")
+                }
+            };
+            let field = self.consume(
+                scanner::TokenType::Identifier,
+                "Expected identifier after subfield accessor.",
+            )?;
+            let field_name = match &field.literal {
+                Some(scanner::Literal::Identifier(s)) => {
+                    expr::Expr::Literal(expr::Literal::String(s.clone()))
+                }
+                Some(l) => panic!(
+                    "internal error in parser: when parsing identifier, found literal {:?}",
+                    l
+                ),
+                None => {
+                    panic!("internal error in parser: when parsing identifier, found no literal")
+                }
+            };
+
+            return Ok(expr::Expr::Call(
+                Box::new(expr::Expr::Variable(expr::Symbol {
+                    name: "subfield".to_string(),
+                    line: self.previous().line,
+                    col: self.previous().col,
+                    var_type: None,
+                })),
+                expr::SourceLocation {
+                    line: self.previous().line,
+                    col: self.previous().col,
+                },
+                vec![prev, field_name],
             ));
         }
 

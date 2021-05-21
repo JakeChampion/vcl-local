@@ -13,7 +13,7 @@ A tree-walk interpreter for Fastly VCL
 
 ## Examples
 
-Now consider hello.vcl
+Consider hello.vcl
 
 ``` vcl
 log "hello world";
@@ -73,7 +73,8 @@ AST: [
 - [ ] short strings need percent decoding
 - [ ] long strings do not need percent decoding
 - [ ] typed tables
-- [ ] subfield lookup using colon -- `set client.identity = req.http.cookie:user_id;`
+- [x] subfield lookup using colon -- `set client.identity = req.http.cookie:user_id;`
+- [ ] subfield setting using colon -- `set req.http.Cache-Control:max-age = "3600";`
 
 ### Interpreter
 
