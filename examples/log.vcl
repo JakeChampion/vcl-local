@@ -17,7 +17,9 @@
 # set var.a = "a""B""c""ddd";
 # log var.a;
 
-declare local var.m INTEGER;
-set var.m = -21;
-set var.m %= 4;
+declare local var.m BOOL;
+set var.m = true;
+declare local var.n BOOL;
+set var.n = false;
+set var.m ||= var.n;
 log var.m;
