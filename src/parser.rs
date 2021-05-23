@@ -7,7 +7,7 @@ struct Parser {
     tokens: Vec<scanner::Token>,
     current: usize,
     in_subdec: bool,
-    statements: Vec<expr::Stmt>
+    statements: Vec<expr::Stmt>,
 }
 
 impl Default for Parser {
@@ -950,6 +950,18 @@ impl Parser {
             scanner::TokenType::Equal,
             scanner::TokenType::Subtraction,
             scanner::TokenType::Addition,
+            scanner::TokenType::Multiplication,
+            scanner::TokenType::Division,
+            scanner::TokenType::Modulus,
+            scanner::TokenType::BitwiseOr,
+            scanner::TokenType::BitwiseAnd,
+            scanner::TokenType::BitwiseXor,
+            scanner::TokenType::LeftShift,
+            scanner::TokenType::RightShift,
+            scanner::TokenType::LeftRotate,
+            scanner::TokenType::RightRotate,
+            scanner::TokenType::LogicalAnd,
+            scanner::TokenType::LogicalOr,
         ]) {
             let token = self.previous().clone();
             let assignment_type = match token.ty {
@@ -1040,13 +1052,7 @@ impl Parser {
     fn addition(&mut self) -> Result<expr::Expr, Error> {
         let mut expr = self.multiplication()?;
 
-        while self.match_one_of(vec![
-            scanner::TokenType::Plus,
-            scanner::TokenType::String,
-        ]) {
-            println!("expr: {:?}", expr);
-            println!("previous: {:?}", self.previous());
-            println!("current: {:?}", self.peek());
+        while self.match_one_of(vec![scanner::TokenType::Plus, scanner::TokenType::String]) {
             let operator_token = self.previous().clone();
             let right = if operator_token.ty == scanner::TokenType::String {
                 Box::new(self.string(&operator_token)?)
@@ -1062,12 +1068,11 @@ impl Parser {
                     expr = expr::Expr::Binary(left, binop, right);
                 }
                 Err(err) => {
-                    println!("current: {:?}", self.peek());
                     if self.check(scanner::TokenType::Semicolon) {
                         return Ok(expr);
                     }
-                    return Err(err)
-                },
+                    return Err(err);
+                }
             }
         }
         Ok(expr)
@@ -1254,29 +1259,29 @@ impl Parser {
         }
         if self.matches(scanner::TokenType::Identifier) {
             let token = self.previous().clone();
-            // let v = String::from_utf8(token.lexeme.clone()).unwrap();
-            let name_token = token;
-            // match v.as_str() {
-            //     "req" | "bereq" | "obj" | "resp" | "beresp" => {
-            //         name_token = token;
-            //     }
-            //     "var" => {
-            //         self.consume(
-            //             scanner::TokenType::Dot,
-            //             "Expected . after var prefix",
-            //         )?;
-            //         name_token = self
-            //         .consume(scanner::TokenType::Identifier, "Expected variable name")?
-            //         .clone();
-            //     }
-            //     _ => {
-            //         return Err(Error::TokenMismatch {
-            //             expected: scanner::TokenType::Identifier,
-            //             found: token,
-            //             maybe_on_err_string: Some(format!("Found {} - Expected one of var req bereq obj resp beresp", v)),
-            //         });
-            //     }
-            // }
+            let v = String::from_utf8(token.lexeme.clone()).unwrap();
+            let name_token;
+            match v.as_str() {
+                "req" | "bereq" | "obj" | "resp" | "beresp" => {
+                    name_token = token;
+                }
+                "var" => {
+                    self.consume(scanner::TokenType::Dot, "Expected . after var prefix")?;
+                    name_token = self
+                        .consume(scanner::TokenType::Identifier, "Expected variable name")?
+                        .clone();
+                }
+                _ => {
+                    return Err(Error::TokenMismatch {
+                        expected: scanner::TokenType::Identifier,
+                        found: token,
+                        maybe_on_err_string: Some(format!(
+                            "Found {} - Expected one of var req bereq obj resp beresp",
+                            v
+                        )),
+                    });
+                }
+            }
 
             match &name_token.literal {
                 Some(scanner::Literal::Identifier(s)) => {
@@ -1306,22 +1311,6 @@ impl Parser {
             }
             return Ok(expr::Expr::Grouping(expr));
         }
-        if self.matches(scanner::TokenType::LeftBracket) {
-            let mut list_elements = Vec::new();
-
-            if !self.check(scanner::TokenType::RightBracket) {
-                loop {
-                    list_elements.push(self.expression()?);
-                    if !self.matches(scanner::TokenType::Comma) {
-                        break;
-                    }
-                }
-            }
-
-            self.consume(scanner::TokenType::RightBracket, "Expected ].")?;
-
-            return Ok(expr::Expr::List(list_elements));
-        }
         if self.matches(scanner::TokenType::If) {
             self.consume(scanner::TokenType::LeftParen, "Expected ( after if.")?;
             let cond = self.expression()?;
@@ -1350,9 +1339,11 @@ impl Parser {
         if self.matches(scanner::TokenType::Colon) {
             let prev = self.statements.pop().unwrap();
             let prev = match prev {
-                expr::Stmt::Expr(e) => {e}
+                expr::Stmt::Expr(e) => e,
                 _ => {
-                    panic!("internal error in parser: can only use subfield accessor on expressions")
+                    panic!(
+                        "internal error in parser: can only use subfield accessor on expressions"
+                    )
                 }
             };
             let field = self.consume(

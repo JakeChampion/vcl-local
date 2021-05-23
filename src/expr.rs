@@ -25,7 +25,6 @@ pub enum Expr {
     LogicalOr(Box<Expr>, Box<Expr>),
     Logical(Box<Expr>, LogicalOp, Box<Expr>),
     Set(Box<Expr>, Symbol, Box<Expr>),
-    List(Vec<Expr>),
     If(Box<Expr>, Box<Expr>, Box<Expr>),
 }
 

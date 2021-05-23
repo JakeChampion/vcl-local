@@ -494,8 +494,6 @@ impl Scanner {
 
     fn number_or_duration(&mut self) {
         let is_neg = self.previous() == '-';
-        println!("self.previous(): {}", self.previous());
-        println!("is_neg: {}", is_neg);
         if is_neg {
             self.advance();
         }

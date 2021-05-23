@@ -9,6 +9,7 @@ use std::fs;
 mod expr;
 mod parser;
 mod scanner;
+mod interpreter;
 
 static INPUT_STR: &str = "INPUT";
 static SHOW_TOKENS_STR: &str = "show tokens";
@@ -68,6 +69,24 @@ fn main() {
                             if matches.is_present(SHOW_AST_STR) {
                                 println!("AST: {:#?}", stmts);
                                 std::process::exit(0);
+                            }
+
+                            let mut interpreter: interpreter::Interpreter =
+                                Default::default();
+                            let interpret_result = interpreter.interpret(&stmts);
+
+                            match interpret_result {
+                                Ok(_) => {
+                                    std::process::exit(0);
+                                }
+                                Err(err) => {
+                                    println!(
+                                        "Runtime Error: {}\n\n{}",
+                                        err,
+                                        interpreter.format_backtrace()
+                                    );
+                                    std::process::exit(-1);
+                                }
                             }
                         }
                         Err(err) => {
