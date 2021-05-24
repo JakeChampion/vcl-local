@@ -825,7 +825,7 @@ impl Parser {
             "Expected ; after add statement",
         )?;
 
-        return Ok(expr::Stmt::Add(var, val));
+        Ok(expr::Stmt::Add(var, val))
     }
     fn synthetic_statement(&mut self) -> Result<expr::Stmt, Error> {
         let val = self.addition()?;
@@ -834,7 +834,7 @@ impl Parser {
             "Expected ; after synthetic statement",
         )?;
 
-        return Ok(expr::Stmt::Synthetic(val));
+        Ok(expr::Stmt::Synthetic(val))
     }
     fn synthetic_base64_statement(&mut self) -> Result<expr::Stmt, Error> {
         let val = self.addition()?;
@@ -843,7 +843,7 @@ impl Parser {
             "Expected ; after synthetic.base64 statement",
         )?;
 
-        return Ok(expr::Stmt::SyntheticBase64(val));
+        Ok(expr::Stmt::SyntheticBase64(val))
     }
     fn unset_statement(&mut self) -> Result<expr::Stmt, Error> {
         let var = self.primary()?;
@@ -852,7 +852,7 @@ impl Parser {
             "Expected ; after unset statement",
         )?;
 
-        return Ok(expr::Stmt::Unset(var));
+        Ok(expr::Stmt::Unset(var))
     }
 
     fn set_statement(&mut self) -> Result<expr::Stmt, Error> {
