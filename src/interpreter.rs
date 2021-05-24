@@ -21,7 +21,7 @@ pub struct NativeFunction {
 }
 
 impl fmt::Debug for NativeFunction {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "NativeFunction({})", self.name)
     }
 }
@@ -150,7 +150,7 @@ pub fn type_of(val: &Value) -> Type {
 }
 
 impl fmt::Display for Value {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self {
             Value::Float(n) => write!(f, "{}", n),
             Value::Integer(n) => write!(f, "{}", n),
@@ -195,7 +195,7 @@ impl Environment {
         );
     }
 
-    pub fn lookup(&self, sym: &expr::Symbol) -> LookupResult {
+    pub fn lookup(&self, sym: &expr::Symbol) -> LookupResult<'_> {
         match self.venv.get(&sym.name) {
             Some((maybe_val, defn_source_location)) => match maybe_val {
                 Some(val) => LookupResult::Ok(&val),
