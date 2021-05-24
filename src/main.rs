@@ -1,6 +1,13 @@
 #![allow(dead_code)]
 #![forbid(unsafe_code, future_incompatible, rust_2018_idioms)]
 #![deny(missing_debug_implementations, nonstandard_style)]
+#![warn(
+    // clippy::all,
+    // clippy::restriction,
+    clippy::pedantic,
+    // clippy::nursery,
+    clippy::cargo,
+)]
 
 use clap::{App, Arg};
 
@@ -72,7 +79,7 @@ fn main() {
                             }
 
                             let mut interpreter: interpreter::Interpreter =
-                                Default::default();
+                                interpreter::Interpreter::default();
                             let interpret_result = interpreter.interpret(&stmts);
 
                             match interpret_result {

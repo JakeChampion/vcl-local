@@ -267,11 +267,11 @@ impl Default for Interpreter {
 
         Interpreter {
             counter: 0,
-            lox_functions: Default::default(),
-            env: Default::default(),
+            lox_functions: HashMap::default(),
+            env: Environment::default(),
             globals,
             retval: None,
-            output: Default::default(),
+            output: Vec::default(),
             interrupted: Arc::new(AtomicBool::new(false)),
             backtrace: vec![(0, "script".to_string())],
         }
