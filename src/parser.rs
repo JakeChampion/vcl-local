@@ -759,8 +759,7 @@ impl Parser {
 
     fn statement(&mut self) -> Result<expr::Stmt, Error> {
         if self.matches(scanner::TokenType::Add) {
-            // TODO: finish
-            // return self.add_statement();
+            return self.add_statement();
         }
 
         if self.matches(scanner::TokenType::Call) {
@@ -769,18 +768,15 @@ impl Parser {
         }
 
         if self.matches(scanner::TokenType::Set) {
-            // TODO: finish
-            // return self.set_statement();
+            return self.set_statement();
         }
 
         if self.matches(scanner::TokenType::Unset) {
-            // TODO: finish
-            // return self.unset_statement();
+            return self.unset_statement();
         }
 
         if self.matches(scanner::TokenType::Remove) {
-            // TODO: finish
-            // return self.remove_statement();
+            return self.unset_statement();
         }
 
         if self.matches(scanner::TokenType::LeftBrace) {
@@ -806,8 +802,11 @@ impl Parser {
             return self.restart_statement();
         }
         if self.matches(scanner::TokenType::Synthetic) {
-            // TODO: finish
-            // return self.synthetic_statement();
+            return self.synthetic_statement();
+        }
+
+        if self.matches(scanner::TokenType::SyntheticBase64) {
+            return self.synthetic_base64_statement();
         }
 
         if self.matches(scanner::TokenType::Return) {
@@ -815,6 +814,57 @@ impl Parser {
         }
 
         self.expression_statement()
+    }
+
+    fn add_statement(&mut self) -> Result<expr::Stmt, Error> {
+        let var = self.primary()?;
+        self.consume(scanner::TokenType::Equal, "Expected = after add statement variable name.")?;
+        let val = self.addition()?;
+        self.consume(
+            scanner::TokenType::Semicolon,
+            "Expected ; after add statement",
+        )?;
+
+        return Ok(expr::Stmt::Add(var, val));
+    }
+    fn synthetic_statement(&mut self) -> Result<expr::Stmt, Error> {
+        let val = self.addition()?;
+        self.consume(
+            scanner::TokenType::Semicolon,
+            "Expected ; after synthetic statement",
+        )?;
+
+        return Ok(expr::Stmt::Synthetic(val));
+    }
+    fn synthetic_base64_statement(&mut self) -> Result<expr::Stmt, Error> {
+        let val = self.addition()?;
+        self.consume(
+            scanner::TokenType::Semicolon,
+            "Expected ; after synthetic.base64 statement",
+        )?;
+
+        return Ok(expr::Stmt::SyntheticBase64(val));
+    }
+    fn unset_statement(&mut self) -> Result<expr::Stmt, Error> {
+        let var = self.primary()?;
+        self.consume(
+            scanner::TokenType::Semicolon,
+            "Expected ; after unset statement",
+        )?;
+
+        return Ok(expr::Stmt::Unset(var));
+    }
+
+    fn set_statement(&mut self) -> Result<expr::Stmt, Error> {
+        let var = self.primary()?;
+        self.consume(scanner::TokenType::Equal, "Expected = after set statement variable name.")?;
+        let val = self.addition()?;
+        self.consume(
+            scanner::TokenType::Semicolon,
+            "Expected ; after set statement",
+        )?;
+
+        Ok(expr::Stmt::Set(var, val))
     }
 
     fn error_statement(&mut self) -> Result<expr::Stmt, Error> {
@@ -846,7 +896,7 @@ impl Parser {
 
         self.consume(
             scanner::TokenType::Semicolon,
-            "Expected ; after return value",
+            "Expected ; after restart statement",
         )?;
 
         Ok(expr::Stmt::Restart(expr::SourceLocation {
@@ -1050,16 +1100,15 @@ impl Parser {
     }
 
     fn addition(&mut self) -> Result<expr::Expr, Error> {
-        let mut expr = self.multiplication()?;
+        let mut expr = self.unary()?;
 
         while self.match_one_of(vec![scanner::TokenType::Plus, scanner::TokenType::String]) {
             let operator_token = self.previous().clone();
             let right = if operator_token.ty == scanner::TokenType::String {
                 Box::new(self.string(&operator_token)?)
             } else {
-                Box::new(self.multiplication()?)
+                Box::new(self.unary()?)
             };
-            // let right = Box::new(self.multiplication()?);
             let binop_maybe = Parser::op_token_to_binop(&operator_token);
 
             match binop_maybe {
@@ -1073,28 +1122,6 @@ impl Parser {
                     }
                     return Err(err);
                 }
-            }
-        }
-        Ok(expr)
-    }
-
-    fn multiplication(&mut self) -> Result<expr::Expr, Error> {
-        let mut expr = self.unary()?;
-
-        while self.match_one_of(vec![
-            scanner::TokenType::Division,
-            scanner::TokenType::Multiplication,
-        ]) {
-            let operator_token = self.previous().clone();
-            let right = Box::new(self.unary()?);
-            let binop_maybe = Parser::op_token_to_binop(&operator_token);
-
-            match binop_maybe {
-                Ok(binop) => {
-                    let left = Box::new(expr);
-                    expr = expr::Expr::Binary(left, binop, right);
-                }
-                Err(err) => return Err(err),
             }
         }
         Ok(expr)

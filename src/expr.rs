@@ -205,6 +205,12 @@ pub enum Stmt {
     Acl(Acl),
     Restart(SourceLocation),
     Error(Error),
+
+    Add(Expr, Expr),
+    Set(Expr, Expr),
+    Unset(Expr),
+    Synthetic(Expr),
+    SyntheticBase64(Expr),
 }
 
 #[derive(Debug, Copy, Clone)]

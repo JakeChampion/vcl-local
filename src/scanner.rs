@@ -62,6 +62,7 @@ pub enum TokenType {
     // Keywords.
     Add,
     Synthetic,
+    SyntheticBase64,
     Restart,
     Log,
     Remove,
@@ -178,6 +179,7 @@ impl Default for Scanner {
                 ("restart", TokenType::Restart),
                 ("return", TokenType::Return),
                 ("set", TokenType::Set),
+                ("synthetic.base64", TokenType::SyntheticBase64),
                 ("synthetic", TokenType::Synthetic),
                 ("sub", TokenType::Sub),
                 ("unset", TokenType::Unset),
@@ -458,6 +460,39 @@ impl Scanner {
             self.advance();
             self.advance();
             return self.add_token(TokenType::Declare);
+        } else if self.previous() == 's'
+            && self.peek() == 'y'
+            && self.peek_at(1) == 'n'
+            && self.peek_at(2) == 't'
+            && self.peek_at(3) == 'h'
+            && self.peek_at(4) == 'e'
+            && self.peek_at(5) == 't'
+            && self.peek_at(6) == 'i'
+            && self.peek_at(7) == 'c'
+            && self.peek_at(8) == '.'
+            && self.peek_at(9) == 'b'
+            && self.peek_at(10) == 'a'
+            && self.peek_at(11) == 's'
+            && self.peek_at(12) == 'e'
+            && self.peek_at(13) == '6'
+            && self.peek_at(14) == '4'
+        {
+            self.advance();
+            self.advance();
+            self.advance();
+            self.advance();
+            self.advance();
+            self.advance();
+            self.advance();
+            self.advance();
+            self.advance();
+            self.advance();
+            self.advance();
+            self.advance();
+            self.advance();
+            self.advance();
+            self.advance();
+            return self.add_token(TokenType::SyntheticBase64);
         }
 
         while Scanner::is_alphanumericunderscoredash(self.peek()) {
@@ -1682,6 +1717,27 @@ mod tests {
                     literal: None,
                     line: 1,
                     col: 4
+                }
+            ]
+        );
+
+        let tokens = scan_tokens("synthetic.base64".to_owned()).unwrap();
+        assert_eq!(
+            tokens,
+            vec![
+                Token {
+                    ty: TokenType::SyntheticBase64,
+                    lexeme: "synthetic.base64".as_bytes().to_vec(),
+                    literal: None,
+                    line: 1,
+                    col: 15
+                },
+                Token {
+                    ty: TokenType::Eof,
+                    lexeme: "".as_bytes().to_vec(),
+                    literal: None,
+                    line: 1,
+                    col: 15
                 }
             ]
         );
