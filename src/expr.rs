@@ -200,7 +200,7 @@ pub enum Stmt {
     If(Expr, Box<Stmt>, Option<Box<Stmt>>),
     VarDecl(Symbol),
     Block(Vec<Stmt>),
-    Return(SourceLocation, Option<Expr>),
+    Return(SourceLocation, Option<Symbol>),
     Call(Symbol),
     Include(Literal),
 

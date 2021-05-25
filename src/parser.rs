@@ -903,7 +903,36 @@ impl Parser {
     }
 
     fn set_statement(&mut self) -> Result<expr::Stmt, Error> {
-        let identifier = self.primary()?;
+        let mut identifier = self.primary()?;
+        loop {
+            if self.matches(scanner::TokenType::Dot) {
+                let name_token = self.peek().clone();
+                let name_tok = match name_token.ty {
+                    scanner::TokenType::Integer | scanner::TokenType::Identifier => name_token,
+                    _ => {
+                        return Err(Error::TokenMismatch {
+                            expected: scanner::TokenType::Identifier,
+                            found: name_token,
+                            maybe_on_err_string: Some(
+                                "Expected property name after '.'.".to_string(),
+                            ),
+                        });
+                    }
+                };
+                self.advance();
+                identifier = expr::Expr::Get(
+                    Box::new(identifier),
+                    expr::Symbol {
+                        name: String::from_utf8(name_tok.lexeme).unwrap(),
+                        line: name_tok.line,
+                        col: name_tok.col,
+                        var_type: None,
+                    },
+                );
+            } else {
+                break;
+            }
+        }
         if self.match_one_of(
             vec![
                 scanner::TokenType::Equal,
@@ -959,6 +988,7 @@ impl Parser {
                     // return Ok(assignment_type(Box::new(expr), Box::new(value)));
                 }
                 _ => {
+                    println!("fff");
                     return Err(Error::InvalidAssignment {
                         line: token.line,
                         col: token.col,
@@ -967,6 +997,8 @@ impl Parser {
             }
         }
         let token = self.previous().clone();
+        println!("peak: {:?}", self.peek());
+        println!("identifier: {:?}", identifier);
         Err(Error::InvalidAssignment {
             line: token.line,
             col: token.col,
@@ -1024,15 +1056,35 @@ impl Parser {
         let maybe_retval = if self.matches(scanner::TokenType::Semicolon) {
             None
         } else {
-            Some(self.expression()?)
-        };
-
-        if maybe_retval.is_some() {
+            self.consume(scanner::TokenType::LeftParen, "Expected left paren after return statement.")?;
+            let token = self.consume(
+                scanner::TokenType::Identifier,
+                "Expected identifier after return statement.",
+            )?.clone();
+            self.consume(scanner::TokenType::RightParen, "Expected right paren after return statement state.")?;
             self.consume(
                 scanner::TokenType::Semicolon,
                 "Expected ; after return value",
             )?;
-        }
+            let name = String::from_utf8(token.lexeme.clone()).unwrap();
+            let name = match name.as_str() {
+                "lookup" | "pass" | "error" | "restart" | "hash" | "deliver" | "fetch" | "deliver_stale" => name,
+                _ => return Err(Error::TokenMismatch {
+                    expected: scanner::TokenType::Identifier,
+                    found: token,
+                    maybe_on_err_string: Some(format!(
+                        "Found {} - Expected one of lookup, pass, error, restart, hash, deliver, fetch, deliver_stale",
+                        name
+                    )),
+                })
+            };
+            Some(expr::Symbol {
+                name,
+                line: token.line,
+                col: token.col,
+                var_type: None,
+            })
+        };
 
         Ok(expr::Stmt::Return(
             expr::SourceLocation {
@@ -1315,13 +1367,65 @@ impl Parser {
         let name_token;
         match v.as_str() {
             "req" | "bereq" | "obj" | "resp" | "beresp" => {
-                name_token = token;
+                let mut identifier = expr::Expr::Variable(expr::Symbol {
+                    name: v.clone(),
+                    line: self.previous().line,
+                    col: self.previous().col,
+                    var_type: None,
+                });
+                loop {
+                    if self.matches(scanner::TokenType::Dot) {
+                        let name_token = self.peek().clone();
+                        let name_tok = match name_token.ty {
+                            scanner::TokenType::Integer | scanner::TokenType::Identifier => name_token,
+                            _ => {
+                                return Err(Error::TokenMismatch {
+                                    expected: scanner::TokenType::Identifier,
+                                    found: name_token,
+                                    maybe_on_err_string: Some(
+                                        "Expected property name after '.'.".to_string(),
+                                    ),
+                                });
+                            }
+                        };
+                        self.advance();
+                        identifier = expr::Expr::Get(
+                            Box::new(identifier),
+                            expr::Symbol {
+                                name: String::from_utf8(name_tok.lexeme).unwrap(),
+                                line: name_tok.line,
+                                col: name_tok.col,
+                                var_type: None,
+                            },
+                        );
+                    } else {
+                        // break;
+                        return Ok(identifier);
+                    }
+                }
             }
             "var" => {
                 self.consume(scanner::TokenType::Dot, "Expected . after var prefix")?;
                 name_token = self
                     .consume(scanner::TokenType::Identifier, "Expected variable name")?
                     .clone();
+                    match &name_token.literal {
+                        Some(scanner::Literal::Identifier(s)) => {
+                            return Ok(expr::Expr::Variable(expr::Symbol {
+                                name: s.clone(),
+                                line: self.previous().line,
+                                col: self.previous().col,
+                                var_type: None,
+                            }))
+                        }
+                        Some(l) => panic!(
+                            "internal error in parser: when parsing identifier, found literal {:?}",
+                            l
+                        ),
+                        None => {
+                            panic!("internal error in parser: when parsing identifier, found no literal")
+                        }
+                    }
             }
             _ => {
                 return Err(Error::TokenMismatch {
@@ -1332,24 +1436,6 @@ impl Parser {
                         v
                     )),
                 });
-            }
-        }
-
-        match &name_token.literal {
-            Some(scanner::Literal::Identifier(s)) => {
-                return Ok(expr::Expr::Variable(expr::Symbol {
-                    name: s.clone(),
-                    line: self.previous().line,
-                    col: self.previous().col,
-                    var_type: None,
-                }))
-            }
-            Some(l) => panic!(
-                "internal error in parser: when parsing identifier, found literal {:?}",
-                l
-            ),
-            None => {
-                panic!("internal error in parser: when parsing identifier, found no literal")
             }
         }
     }

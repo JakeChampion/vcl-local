@@ -343,13 +343,8 @@ impl Interpreter {
 
                 Ok(())
             }
-            expr::Stmt::Return(_, maybe_res) => {
-                self.retval = Some(if let Some(res) = maybe_res {
-                    self.interpret_expr(res)?
-                } else {
-                    Value::Nil
-                });
-                Ok(())
+            expr::Stmt::Return(_, _) => {
+                todo!()
             }
             expr::Stmt::SubDecl(_) | expr::Stmt::Backend(_) | expr::Stmt::Director(_) | expr::Stmt::Table(_) | expr::Stmt::Acl(_) | expr::Stmt::Restart(_) | expr::Stmt::Error(_) | expr::Stmt::Add(_, _) | expr::Stmt::Unset(_) | expr::Stmt::Synthetic(_) | expr::Stmt::SyntheticBase64(_) => {todo!()}
             expr::Stmt::Set(identifier, assignment, value) => {
@@ -471,15 +466,22 @@ impl Interpreter {
         };
         let sym_val = self.lookup(sym_inner)?;
         let int = match val_expr {
-            expr::Expr::Literal(a) => {a}
-            _ => {unreachable!("2121")}
+            expr::Expr::Literal(a) => {
+                match a {
+                    expr::Literal::Float(a) => {Value::Float(*a)}
+                    expr::Literal::Integer(a) => {Value::Integer(*a)}
+                    _ => {panic!("no please don't make me -= things of different types")}
+                }
+            }
+            expr::Expr::Variable(s) => {self.lookup(s)?.clone()}
+            _ => {todo!("2121")}
         };
 
         let v = match (sym_val, int) {
-            (Value::Integer(a), expr::Literal::Integer(b)) => {
+            (Value::Integer(a), Value::Integer(b)) => {
                 Value::Integer(a-b)
             }
-            (Value::Float(a), expr::Literal::Float(b)) => {
+            (Value::Float(a), Value::Float(b)) => {
                 Value::Float(a-b)
             }
             _ => {panic!("no please don't make me -= things of different types")}
