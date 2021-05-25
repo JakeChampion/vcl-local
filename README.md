@@ -75,9 +75,18 @@ AST: [
 - [ ] typed tables
 - [x] subfield lookup using colon -- `set client.identity = req.http.cookie:user_id;`
 - [ ] subfield setting using colon -- `set req.http.Cache-Control:max-age = "3600";`
+- [ ] regex capture groups
+- [ ] PCRE2 modifiers
 
 ### Interpreter
 
 - [ ] The integer variants of the +=, -=, and *= operators wrap around as if they were unsigned 64-bit integers.
 - [ ] FLOAT arithmetic has special cases for operands which are NaN: Arithmetic operators evaluate to NaN when either operand is NaN.
 - [ ] fastly.error = "EDOM" when Domain error. This occurs for a mathematical function which is not defined for a particular value; formally, that value is not considered part of its input domain. For example, division by zero, or var.x %= 5; where var.x is a floating point infinity.
+- [ ] subroutine
+- [ ] backend
+- [ ] director
+- [ ] call
+- [ ] state machine
+- [ ] stdlib
+- [ ] regex capture groups

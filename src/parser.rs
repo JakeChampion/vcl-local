@@ -203,18 +203,21 @@ impl Parser {
             return Ok(expr::Stmt::SubDecl(self.sub_decl(&SubKind::Function)?));
         }
 
-        if self.matches(scanner::TokenType::Backend) {
-            return Ok(expr::Stmt::Backend(Box::new(self.backend_decl()?)));
-        }
-        if self.matches(scanner::TokenType::Director) {
-            return Ok(expr::Stmt::Director(Box::new(self.director_decl()?)));
-        }
-        if self.matches(scanner::TokenType::Table) {
-            return Ok(expr::Stmt::Table(self.table_decl()?));
-        }
         if self.matches(scanner::TokenType::Acl) {
             // TODO: finish
             // return Ok(expr::Stmt::Acl(self.acl_decl()?));
+        }
+
+        if self.matches(scanner::TokenType::Backend) {
+            return Ok(expr::Stmt::Backend(Box::new(self.backend_decl()?)));
+        }
+
+        if self.matches(scanner::TokenType::Director) {
+            return Ok(expr::Stmt::Director(Box::new(self.director_decl()?)));
+        }
+        
+        if self.matches(scanner::TokenType::Table) {
+            return Ok(expr::Stmt::Table(self.table_decl()?));
         }
 
         self.statement()
