@@ -200,6 +200,7 @@ pub enum Stmt {
     VarDecl(Symbol),
     Block(Vec<Stmt>),
     Return(SourceLocation, Option<Expr>),
+    Call(Symbol),
 
     Log(Expr),
     Backend(Box<Backend>),

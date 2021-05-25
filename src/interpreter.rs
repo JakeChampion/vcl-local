@@ -356,6 +356,7 @@ impl Interpreter {
                 self.interpret_set(identifier, assignment, value)?;
                 Ok(())
             }
+            expr::Stmt::Call(_) => {todo!()}
         }
     }
 

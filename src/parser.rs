@@ -211,7 +211,6 @@ impl Parser {
             return Ok(expr::Stmt::Backend(Box::new(self.backend_decl()?)));
         }
         if self.matches(scanner::TokenType::Director) {
-            // TODO: finish
             return Ok(expr::Stmt::Director(Box::new(self.director_decl()?)));
         }
         if self.matches(scanner::TokenType::Table) {
@@ -763,8 +762,7 @@ impl Parser {
         }
 
         if self.matches(scanner::TokenType::Call) {
-            // TODO: finish
-            // return self.call_statement();
+            return self.call_statement();
         }
 
         if self.matches(scanner::TokenType::Set) {
@@ -814,6 +812,24 @@ impl Parser {
         }
 
         self.expression_statement()
+    }
+
+    fn call_statement(&mut self) -> Result<expr::Stmt, Error> {
+        let identifier = self.consume(
+            scanner::TokenType::Identifier,
+            "Expected identifier after call statement.",
+        )?.clone();
+        self.consume(
+            scanner::TokenType::Semicolon,
+            "Expected ; after call statement",
+        )?;
+
+        Ok(expr::Stmt::Call(expr::Symbol {
+            name: String::from_utf8(identifier.lexeme).unwrap(),
+            line: identifier.line,
+            col: identifier.col,
+            var_type: None,
+        }))
     }
 
     fn add_statement(&mut self) -> Result<expr::Stmt, Error> {
