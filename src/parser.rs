@@ -765,6 +765,10 @@ impl Parser {
             return self.call_statement();
         }
 
+        if self.matches(scanner::TokenType::Esi) {
+            return self.esi_statement();
+        }
+
         if self.matches(scanner::TokenType::Set) {
             return self.set_statement();
         }
@@ -829,6 +833,15 @@ impl Parser {
             col: identifier.col,
             var_type: None,
         }))
+    }
+
+    fn esi_statement(&mut self) -> Result<expr::Stmt, Error> {
+        self.consume(
+            scanner::TokenType::Semicolon,
+            "Expected ; after esi statement",
+        )?;
+
+        Ok(expr::Stmt::Esi)
     }
 
     fn include_statement(&mut self) -> Result<expr::Stmt, Error> {

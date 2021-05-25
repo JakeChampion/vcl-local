@@ -67,7 +67,7 @@ AST: [
 - [ ] Pragmas
 - [ ] Macros
 - [ ] ACL
-- [ ] Includes
+- [x] Includes
 - [x] string concat without requiring `+` sign. e.g. - `set req.http.a = "url:"req.url;`
 - [ ] heredoc syntax for long strings
 - [ ] short strings need percent decoding

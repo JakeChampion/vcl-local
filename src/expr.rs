@@ -194,6 +194,7 @@ pub struct Error {
 
 #[derive(Debug, Clone)]
 pub enum Stmt {
+    Esi,
     Expr(Expr),
     SubDecl(SubDecl),
     If(Expr, Box<Stmt>, Option<Box<Stmt>>),
