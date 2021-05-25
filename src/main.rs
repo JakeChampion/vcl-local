@@ -5,8 +5,7 @@
     // clippy::all,
     // clippy::restriction,
     clippy::pedantic,
-    // clippy::nursery,
-    clippy::cargo,
+    clippy::nursery,
 )]
 
 use clap::{App, Arg};

@@ -20,6 +20,6 @@
 declare local var.m BOOL;
 set var.m = true;
 declare local var.n BOOL;
-set var.n = false;
-set var.m ||= var.n;
+set var.n = true;
+set var.m &&= var.n;
 log var.m;

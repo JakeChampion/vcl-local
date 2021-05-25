@@ -1,5 +1,24 @@
 use derive_builder::Builder;
 #[derive(Debug, Clone)]
+pub enum Assignment {
+    Assign,
+    Addition,
+    Subtraction,
+    Multiplication,
+    Division,
+    Modulus,
+    BitwiseOr,
+    BitwiseAnd,
+    BitwiseXor,
+    LeftShift,
+    RightShift,
+    LeftRotate,
+    RightRotate,
+    LogicalAnd,
+    LogicalOr,
+}
+
+#[derive(Debug, Clone)]
 pub enum Expr {
     Literal(Literal),
     Unary(UnaryOp, Box<Expr>),
@@ -8,23 +27,7 @@ pub enum Expr {
     Get(Box<Expr>, Symbol),
     Grouping(Box<Expr>),
     Variable(Symbol),
-    Assign(Box<Expr>, Box<Expr>),
-    Addition(Box<Expr>, Box<Expr>),
-    Subtraction(Box<Expr>, Box<Expr>),
-    Multiplication(Box<Expr>, Box<Expr>),
-    Division(Box<Expr>, Box<Expr>),
-    Modulus(Box<Expr>, Box<Expr>),
-    BitwiseOr(Box<Expr>, Box<Expr>),
-    BitwiseAnd(Box<Expr>, Box<Expr>),
-    BitwiseXor(Box<Expr>, Box<Expr>),
-    LeftShift(Box<Expr>, Box<Expr>),
-    RightShift(Box<Expr>, Box<Expr>),
-    LeftRotate(Box<Expr>, Box<Expr>),
-    RightRotate(Box<Expr>, Box<Expr>),
-    LogicalAnd(Box<Expr>, Box<Expr>),
-    LogicalOr(Box<Expr>, Box<Expr>),
     Logical(Box<Expr>, LogicalOp, Box<Expr>),
-    Set(Box<Expr>, Symbol, Box<Expr>),
     If(Box<Expr>, Box<Expr>, Box<Expr>),
 }
 
@@ -207,7 +210,7 @@ pub enum Stmt {
     Error(Error),
 
     Add(Expr, Expr),
-    Set(Expr, Expr),
+    Set(Expr, Assignment, Expr),
     Unset(Expr),
     Synthetic(Expr),
     SyntheticBase64(Expr),

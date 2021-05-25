@@ -132,7 +132,7 @@ impl fmt::Debug for Token {
 }
 
 pub fn scan_tokens(input: String) -> Result<Vec<Token>, String> {
-    let mut scanner: Scanner = Default::default();
+    let mut scanner: Scanner = Scanner::default();
 
     scanner.scan_tokens(input);
 
@@ -154,8 +154,8 @@ struct Scanner {
 }
 
 impl Default for Scanner {
-    fn default() -> Scanner {
-        Scanner {
+    fn default() -> Self {
+        Self {
             source: Vec::new(),
             tokens: Vec::new(),
             err: None,
@@ -404,11 +404,11 @@ impl Scanner {
     }
 
     fn is_alphanumericunderscoredash(c: char) -> bool {
-        Scanner::is_alpha(c) || Scanner::is_decimal_digit(c) || c == '_' || c == '-'
+        Self::is_alpha(c) || Self::is_decimal_digit(c) || c == '_' || c == '-'
     }
 
     fn identifier(&mut self) {
-        while Scanner::is_alphanumericunderscoredash(self.peek()) {
+        while Self::is_alphanumericunderscoredash(self.peek()) {
             self.advance();
         }
         let literal_val =
@@ -573,7 +573,6 @@ impl Scanner {
                 self.advance();
             }
             self.advance();
-            // TODO: stop hardcoding duration to seconds
             return self.add_token_literal(TokenType::Duration, Some(Literal::Duration(val, unit)));
         }
 
@@ -667,7 +666,7 @@ impl Scanner {
                 String::from_utf8(self.source[self.start + 1..self.current - 1].to_vec()).unwrap();
             self.start = self.current;
             self.advance();
-            while Scanner::is_decimal_digit(self.peek()) && !self.is_at_end() {
+            while Self::is_decimal_digit(self.peek()) && !self.is_at_end() {
                 self.advance();
             }
             let range: u8 = String::from_utf8(self.source[self.start + 1..self.current].to_vec())
@@ -974,7 +973,7 @@ mod tests {
                 Token {
                     ty: TokenType::Integer,
                     lexeme: "-9223372036854775808".as_bytes().to_vec(),
-                    literal: Some(Literal::Integer(-9223372036854775808)),
+                    literal: Some(Literal::Integer(-9_223_372_036_854_775_808)),
                     line: 1,
                     col: 19,
                 },
@@ -995,7 +994,7 @@ mod tests {
                 Token {
                     ty: TokenType::Integer,
                     lexeme: "-0x8000000000000000".as_bytes().to_vec(),
-                    literal: Some(Literal::Integer(-9223372036854775808)),
+                    literal: Some(Literal::Integer(-9_223_372_036_854_775_808)),
                     line: 1,
                     col: 18,
                 },

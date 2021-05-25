@@ -137,7 +137,7 @@ pub enum Type {
     List,
 }
 
-pub fn type_of(val: &Value) -> Type {
+pub const fn type_of(val: &Value) -> Type {
     match val {
         Value::Float(_) => Type::Float,
         Value::Integer(_) => Type::Integer,
@@ -198,7 +198,7 @@ impl Environment {
     pub fn lookup(&self, sym: &expr::Symbol) -> LookupResult<'_> {
         match self.venv.get(&sym.name) {
             Some((maybe_val, defn_source_location)) => match maybe_val {
-                Some(val) => LookupResult::Ok(&val),
+                Some(val) => LookupResult::Ok(val),
                 None => LookupResult::UndefButDeclared(SourceLocation {
                     line: defn_source_location.line,
                     col: defn_source_location.col,
@@ -209,8 +209,8 @@ impl Environment {
     }
 
     pub fn get(&self, sym: &expr::Symbol) -> Result<&Value, String> {
-        match self.lookup(&sym) {
-            LookupResult::Ok(val) => Ok(&val),
+        match self.lookup(sym) {
+            LookupResult::Ok(val) => Ok(val),
             LookupResult::UndefButDeclared(source_location) => Err(format!(
                 "Use of undefined variable '{}' at line={},col={}.\
                 \nNote: {} was previously declared at line={},col={}, \
@@ -259,13 +259,13 @@ pub struct Interpreter {
 }
 
 impl Default for Interpreter {
-    fn default() -> Interpreter {
+    fn default() -> Self {
         let globals_venv = HashMap::new();
         let globals = Environment {
             venv: globals_venv,
         };
 
-        Interpreter {
+        Self {
             counter: 0,
             lox_functions: HashMap::default(),
             env: Environment::default(),
@@ -314,7 +314,7 @@ impl Interpreter {
                 Err(err) => Err(err),
             },
             expr::Stmt::If(cond, if_true, maybe_if_false) => {
-                if Interpreter::is_truthy(&self.interpret_expr(cond)?) {
+                if Self::is_truthy(&self.interpret_expr(cond)?) {
                     return self.execute(if_true);
                 }
                 if let Some(if_false) = maybe_if_false {
@@ -351,18 +351,43 @@ impl Interpreter {
                 });
                 Ok(())
             }
-            expr::Stmt::SubDecl(_) => {todo!()}
-            expr::Stmt::Backend(_) => {todo!()}
-            expr::Stmt::Director(_) => {todo!()}
-            expr::Stmt::Table(_) => {todo!()}
-            expr::Stmt::Acl(_) => {todo!()}
-            expr::Stmt::Restart(_) => {todo!()}
-            expr::Stmt::Error(_) => {todo!()}
-            expr::Stmt::Add(_, _) => {todo!()}
-            expr::Stmt::Set(_, _) => {todo!()}
-            expr::Stmt::Unset(_) => {todo!()}
-            expr::Stmt::Synthetic(_) => {todo!()}
-            expr::Stmt::SyntheticBase64(_) => {todo!()}
+            expr::Stmt::SubDecl(_) | expr::Stmt::Backend(_) | expr::Stmt::Director(_) | expr::Stmt::Table(_) | expr::Stmt::Acl(_) | expr::Stmt::Restart(_) | expr::Stmt::Error(_) | expr::Stmt::Add(_, _) | expr::Stmt::Unset(_) | expr::Stmt::Synthetic(_) | expr::Stmt::SyntheticBase64(_) => {todo!()}
+            expr::Stmt::Set(identifier, assignment, value) => {
+                self.interpret_set(identifier, assignment, value)?;
+                Ok(())
+            }
+        }
+    }
+
+    fn interpret_set(&mut self, sym: &expr::Expr, assignment: &expr::Assignment, val_expr: &expr::Expr) -> Result<Value, String> {
+        if self.interrupted.load(Ordering::Acquire) {
+            return Ok(Value::Nil);
+        }
+
+        match assignment {
+            expr::Assignment::Assign => {
+                let val = self.interpret_expr(val_expr)?;
+
+                if let Err(err) = self.env.assign(sym.clone(), &val) {
+                    return Err(err);
+                }
+
+                Ok(val)
+            }
+            expr::Assignment::Addition => {self.addition(sym, val_expr)}
+            expr::Assignment::Subtraction => {self.subtraction(sym, val_expr)}
+            expr::Assignment::Multiplication => {self.multiplication(sym, val_expr)}
+            expr::Assignment::Division => {self.division(sym, val_expr)}
+            expr::Assignment::Modulus => {self.modulus(sym, val_expr)}
+            expr::Assignment::BitwiseOr => {self.bitwise_or(sym, val_expr)}
+            expr::Assignment::BitwiseAnd => { self.bitwise_and(sym, val_expr)}
+            expr::Assignment::BitwiseXor => {self.bitwise_xor(sym, val_expr)}
+            expr::Assignment::LeftShift => {self.left_shift(sym, val_expr)}
+            expr::Assignment::RightShift => {self.right_shift(sym, val_expr)}
+            expr::Assignment::LeftRotate => { self.rotate_left(sym, val_expr)}
+            expr::Assignment::RightRotate => {self.rotate_right(sym, val_expr)}
+            expr::Assignment::LogicalAnd => { self.logical_and(sym, val_expr)}
+            expr::Assignment::LogicalOr => {self.logical_or(sym, val_expr)}
         }
     }
 
@@ -379,29 +404,19 @@ impl Interpreter {
         }
 
         match expr {
-            expr::Expr::Literal(lit) => Ok(Interpreter::interpret_literal(lit)),
+            expr::Expr::Literal(lit) => Ok(Self::interpret_literal(lit)),
             expr::Expr::Unary(op, e) => self.interpret_unary(*op, e),
             expr::Expr::Binary(lhs, op, rhs) => self.interpret_binary(lhs, *op, rhs),
             expr::Expr::Call(callee, loc, args) => self.call(callee, loc, args),
             expr::Expr::Get(_lhs, _attr) => todo!(),//self.getattr(lhs, &attr.name),
-            expr::Expr::Set(_lhs, _attr, _rhs) => todo!(),//self.setattr(lhs, attr, rhs),
             expr::Expr::Grouping(e) => self.interpret_expr(e),
             expr::Expr::Variable(sym) => match self.lookup(sym) {
                 Ok(val) => Ok(val.clone()),
                 Err(err) => Err(err),
             },
-            expr::Expr::Assign(sym, val_expr) => {
-                let val = self.interpret_expr(val_expr)?;
-
-                if let Err(err) = self.env.assign(sym.as_ref().clone(), &val) {
-                    return Err(err);
-                }
-
-                Ok(val)
-            }
             expr::Expr::Logical(left_expr, expr::LogicalOp::Or, right_expr) => {
                 let left = self.interpret_expr(left_expr)?;
-                if Interpreter::is_truthy(&left) {
+                if Self::is_truthy(&left) {
                     Ok(left)
                 } else {
                     Ok(self.interpret_expr(right_expr)?)
@@ -409,345 +424,385 @@ impl Interpreter {
             }
             expr::Expr::Logical(left_expr, expr::LogicalOp::And, right_expr) => {
                 let left = self.interpret_expr(left_expr)?;
-                if !Interpreter::is_truthy(&left) {
-                    Ok(left)
-                } else {
+                if Self::is_truthy(&left) {
                     Ok(self.interpret_expr(right_expr)?)
+                } else {
+                    Ok(left)
                 }
             }
-            expr::Expr::Addition(sym, val_expr) => {
-                let sym_inner = match sym.as_ref() {
-                    expr::Expr::Variable(s) => {s}
-                    _ => {unreachable!("12")}
-                };
-                let sym_val = self.lookup(sym_inner)?;
-                let int = match val_expr.as_ref() {
-                    expr::Expr::Literal(a) => {a}
-                    _ => {unreachable!("2121")}
-                };
-
-                let v = match (sym_val, int) {
-                    (Value::Integer(a), expr::Literal::Integer(b)) => {
-                        Value::Integer(a+b)
-                    }
-                    (Value::Float(a), expr::Literal::Float(b)) => {
-                        Value::Float(a+b)
-                    }
-                    _ => {panic!("no please don't make me += things of different types")}
-                };
-                self.env.assign(sym.as_ref().clone(), &v)?;
-
-                Ok(v)
-            }
-            expr::Expr::Subtraction(sym, val_expr) => {
-                let sym_inner = match sym.as_ref() {
-                    expr::Expr::Variable(s) => {s}
-                    _ => {unreachable!("12")}
-                };
-                let sym_val = self.lookup(sym_inner)?;
-                let int = match val_expr.as_ref() {
-                    expr::Expr::Literal(a) => {a}
-                    _ => {unreachable!("2121")}
-                };
-
-                let v = match (sym_val, int) {
-                    (Value::Integer(a), expr::Literal::Integer(b)) => {
-                        Value::Integer(a-b)
-                    }
-                    (Value::Float(a), expr::Literal::Float(b)) => {
-                        Value::Float(a-b)
-                    }
-                    _ => {panic!("no please don't make me -= things of different types")}
-                };
-                self.env.assign(sym.as_ref().clone(), &v)?;
-
-                Ok(v)}
-            expr::Expr::Multiplication(sym, val_expr) => {
-                let sym_inner = match sym.as_ref() {
-                    expr::Expr::Variable(s) => {s}
-                    _ => {unreachable!("12")}
-                };
-                let sym_val = self.lookup(sym_inner)?;
-                let int = match val_expr.as_ref() {
-                    expr::Expr::Literal(a) => {a}
-                    _ => {unreachable!("2121")}
-                };
-
-                let v = match (sym_val, int) {
-                    (Value::Integer(a), expr::Literal::Integer(b)) => {
-                        Value::Integer(a*b)
-                    }
-                    (Value::Float(a), expr::Literal::Float(b)) => {
-                        Value::Float(a*b)
-                    }
-                    _ => {panic!("no please don't make me *= things of different types")}
-                };
-                self.env.assign(sym.as_ref().clone(), &v)?;
-
-                Ok(v)}
-            expr::Expr::Division(sym, val_expr) => {
-                let sym_inner = match sym.as_ref() {
-                    expr::Expr::Variable(s) => {s}
-                    _ => {unreachable!("12")}
-                };
-                let sym_val = self.lookup(sym_inner)?;
-                let int = match val_expr.as_ref() {
-                    expr::Expr::Literal(a) => {a}
-                    _ => {unreachable!("2121")}
-                };
-
-                let v = match (sym_val, int) {
-                    (Value::Integer(a), expr::Literal::Integer(b)) => {
-                        Value::Integer(a/b)
-                    }
-                    (Value::Float(a), expr::Literal::Float(b)) => {
-                        Value::Float(a/b)
-                    }
-                    _ => {panic!("no please don't make me /= things of different types")}
-                };
-                self.env.assign(sym.as_ref().clone(), &v)?;
-
-                Ok(v)}
-            expr::Expr::Modulus(sym, val_expr) => {
-                let sym_inner = match sym.as_ref() {
-                    expr::Expr::Variable(s) => {s}
-                    _ => {unreachable!("22")}
-                };
-                let sym_val = self.lookup(sym_inner)?;
-                let int = match val_expr.as_ref() {
-                    expr::Expr::Literal(a) => {a}
-                    _ => {unreachable!("2222")}
-                };
-
-                let v = match (sym_val, int) {
-                    (Value::Integer(a), expr::Literal::Integer(b)) => {
-                        Value::Integer((a).rem_euclid(*b))
-                    }
-                    (Value::Float(a), expr::Literal::Float(b)) => {
-                        Value::Float((a).rem_euclid(*b))
-                    }
-                    _ => {panic!("no please don't make me %= things of different types")}
-                };
-                self.env.assign(sym.as_ref().clone(), &v)?;
-
-                Ok(v)}
-            expr::Expr::BitwiseOr(sym, val_expr) => {
-                let sym_inner = match sym.as_ref() {
-                    expr::Expr::Variable(s) => {s}
-                    _ => {unreachable!("22")}
-                };
-                let sym_val = self.lookup(sym_inner)?;
-                let int = match val_expr.as_ref() {
-                    expr::Expr::Literal(a) => {a}
-                    _ => {unreachable!("2222")}
-                };
-
-                let v = match (sym_val, int) {
-                    (Value::Integer(a), expr::Literal::Integer(b)) => {
-                        Value::Integer(a|b)
-                    }
-                    (Value::Float(_), expr::Literal::Float(_)) => {
-                        panic!("Assignment operator |= not possible for type FLOAT");
-                    }
-                    _ => {panic!("no please don't make me |= things of different types")}
-                };
-                self.env.assign(sym.as_ref().clone(), &v)?;
-
-                Ok(v)}
-            expr::Expr::BitwiseAnd(sym, val_expr) => {
-                let sym_inner = match sym.as_ref() {
-                    expr::Expr::Variable(s) => {s}
-                    _ => {unreachable!("22")}
-                };
-                let sym_val = self.lookup(sym_inner)?;
-                let int = match val_expr.as_ref() {
-                    expr::Expr::Literal(a) => {a}
-                    _ => {unreachable!("2222")}
-                };
-
-                let v = match (sym_val, int) {
-                    (Value::Integer(a), expr::Literal::Integer(b)) => {
-                        Value::Integer(a&b)
-                    }
-                    (Value::Float(_), expr::Literal::Float(_)) => {
-                        panic!("Assignment operator &= not possible for type FLOAT");
-                    }
-                    _ => {panic!("no please don't make me &= things of different types")}
-                };
-                self.env.assign(sym.as_ref().clone(), &v)?;
-
-                Ok(v)}
-            expr::Expr::BitwiseXor(sym, val_expr) => {
-                let sym_inner = match sym.as_ref() {
-                    expr::Expr::Variable(s) => {s}
-                    _ => {unreachable!("22")}
-                };
-                let sym_val = self.lookup(sym_inner)?;
-                let int = match val_expr.as_ref() {
-                    expr::Expr::Literal(a) => {a}
-                    _ => {unreachable!("2222")}
-                };
-
-                let v = match (sym_val, int) {
-                    (Value::Integer(a), expr::Literal::Integer(b)) => {
-                        Value::Integer(a^b)
-                    }
-                    (Value::Float(_), expr::Literal::Float(_)) => {
-                        panic!("Assignment operator ^= not possible for type FLOAT");
-                    }
-                    _ => {panic!("no please don't make me ^= things of different types")}
-                };
-                self.env.assign(sym.as_ref().clone(), &v)?;
-
-                Ok(v)}
-            expr::Expr::LeftShift(sym, val_expr) => {
-                let sym_inner = match sym.as_ref() {
-                    expr::Expr::Variable(s) => {s}
-                    _ => {unreachable!("22")}
-                };
-                let sym_val = self.lookup(sym_inner)?;
-                let int = match val_expr.as_ref() {
-                    expr::Expr::Literal(a) => {a}
-                    _ => {unreachable!("2222")}
-                };
-
-                let v = match (sym_val, int) {
-                    (Value::Integer(a), expr::Literal::Integer(b)) => {
-                        Value::Integer(a<<b)
-                    }
-                    (Value::Float(_), expr::Literal::Float(_)) => {
-                        panic!("Assignment operator <<= not possible for type FLOAT");
-                    }
-                    _ => {panic!("no please don't make me <<= things of different types")}
-                };
-                self.env.assign(sym.as_ref().clone(), &v)?;
-
-                Ok(v)}
-            expr::Expr::RightShift(sym, val_expr) => {
-                let sym_inner = match sym.as_ref() {
-                    expr::Expr::Variable(s) => {s}
-                    _ => {unreachable!("22")}
-                };
-                let sym_val = self.lookup(sym_inner)?;
-                let int = match val_expr.as_ref() {
-                    expr::Expr::Literal(a) => {a}
-                    _ => {unreachable!("2222")}
-                };
-
-                let v = match (sym_val, int) {
-                    (Value::Integer(a), expr::Literal::Integer(b)) => {
-                        Value::Integer(a>>b)
-                    }
-                    (Value::Float(_), expr::Literal::Float(_)) => {
-                        panic!("Assignment operator >>= not possible for type FLOAT");
-                    }
-                    _ => {panic!("no please don't make me >>= things of different types")}
-                };
-                self.env.assign(sym.as_ref().clone(), &v)?;
-
-                Ok(v)}
-            expr::Expr::LeftRotate(sym, val_expr) => {
-                let sym_inner = match sym.as_ref() {
-                    expr::Expr::Variable(s) => {s}
-                    _ => {unreachable!("22")}
-                };
-                let sym_val = self.lookup(sym_inner)?;
-                let int = match val_expr.as_ref() {
-                    expr::Expr::Literal(a) => {a}
-                    _ => {unreachable!("2222")}
-                };
-
-                let v = match (sym_val, int) {
-                    (Value::Integer(a), expr::Literal::Integer(b)) => {
-                        Value::Integer(a.rotate_left(*b as u32))
-                    }
-                    (Value::Float(_), expr::Literal::Float(_)) => {
-                        panic!("Assignment operator rol= not possible for type FLOAT");
-                    }
-                    _ => {panic!("no please don't make me rol= things of different types")}
-                };
-                self.env.assign(sym.as_ref().clone(), &v)?;
-
-                Ok(v)}
-            expr::Expr::RightRotate(sym, val_expr) => {
-                let sym_inner = match sym.as_ref() {
-                    expr::Expr::Variable(s) => {s}
-                    _ => {unreachable!("22")}
-                };
-                let sym_val = self.lookup(sym_inner)?;
-                let int = match val_expr.as_ref() {
-                    expr::Expr::Literal(a) => {a}
-                    _ => {unreachable!("2222")}
-                };
-
-                let v = match (sym_val, int) {
-                    (Value::Integer(a), expr::Literal::Integer(b)) => {
-                        Value::Integer(a.rotate_right(*b as u32))
-                    }
-                    (Value::Float(_), expr::Literal::Float(_)) => {
-                        panic!("Assignment operator ror= not possible for type FLOAT");
-                    }
-                    _ => {panic!("no please don't make me ror= things of different types")}
-                };
-                self.env.assign(sym.as_ref().clone(), &v)?;
-
-                Ok(v)}
-            expr::Expr::LogicalAnd(sym, val_expr) => {
-                let sym_inner = match sym.as_ref() {
-                    expr::Expr::Variable(s) => {s}
-                    _ => {unreachable!("22")}
-                };
-                let sym_val = self.lookup(sym_inner)?;
-                let int = match val_expr.as_ref() {
-                    expr::Expr::Literal(a) => {
-                        match a {
-                            expr::Literal::True => {Value::Bool(true)}
-                            expr::Literal::False => {Value::Bool(false)}
-                            _ => {panic!("no please don't make me &&= things of different types, a: {:?} b: {:?}", sym_val, val_expr.as_ref())}
-                        }
-                    }
-                    expr::Expr::Variable(a) => {self.lookup(a)?.clone()}
-                    _ => {panic!("no please don't make me &&= things of different types, a: {:?} b: {:?}", sym_val, val_expr.as_ref())}
-                };
-
-                let v = match (sym_val, int) {
-                    (Value::Bool(a), Value::Bool(b)) => {
-                        Value::Bool(*a && b)
-                    }
-                    _ => {panic!("no please don't make me &&= things of different types, a: {:?} b: {:?}", sym_val, val_expr.as_ref())}
-                };
-                self.env.assign(sym.as_ref().clone(), &v)?;
-
-                Ok(v)}
-            expr::Expr::LogicalOr(sym, val_expr) => {
-                let sym_inner = match sym.as_ref() {
-                    expr::Expr::Variable(s) => {s}
-                    _ => {unreachable!("22")}
-                };
-                let sym_val = self.lookup(sym_inner)?;
-                let int = match val_expr.as_ref() {
-                    expr::Expr::Literal(a) => {
-                        match a {
-                            expr::Literal::True => {Value::Bool(true)}
-                            expr::Literal::False => {Value::Bool(false)}
-                            _ => {panic!("no please don't make me ||= things of different types, a: {:?} b: {:?}", sym_val, val_expr.as_ref())}
-                        }
-                    }
-                    expr::Expr::Variable(a) => {self.lookup(a)?.clone()}
-                    _ => {panic!("no please don't make me ||= things of different types, a: {:?} b: {:?}", sym_val, val_expr.as_ref())}
-                };
-
-                let v = match (sym_val, int) {
-                    (Value::Bool(a), Value::Bool(b)) => {
-                        Value::Bool(*a || b)
-                    }
-                    _ => {panic!("no please don't make me ||= things of different types, a: {:?} b: {:?}", sym_val, val_expr.as_ref())}
-                };
-                self.env.assign(sym.as_ref().clone(), &v)?;
-
-                Ok(v)}
             expr::Expr::If(_, _, _) => {todo!()}
         }
+    }
+
+    fn addition(&mut self, sym: &expr::Expr, val_expr: &expr::Expr) -> Result<Value, String> {
+
+        let sym_inner = match sym {
+            expr::Expr::Variable(s) => {s}
+            _ => {unreachable!("12")}
+        };
+        let sym_val = self.lookup(sym_inner)?;
+        let int = match val_expr {
+            expr::Expr::Literal(a) => {a}
+            _ => {unreachable!("2121")}
+        };
+
+        let v = match (sym_val, int) {
+            (Value::Integer(a), expr::Literal::Integer(b)) => {
+                Value::Integer(a+b)
+            }
+            (Value::Float(a), expr::Literal::Float(b)) => {
+                Value::Float(a+b)
+            }
+            _ => {panic!("no please don't make me += things of different types")}
+        };
+        self.env.assign(sym.clone(), &v)?;
+
+        Ok(v)
+    }
+
+    fn subtraction(&mut self, sym: &expr::Expr, val_expr: &expr::Expr) -> Result<Value, String> {
+
+        let sym_inner = match sym {
+            expr::Expr::Variable(s) => {s}
+            _ => {unreachable!("12")}
+        };
+        let sym_val = self.lookup(sym_inner)?;
+        let int = match val_expr {
+            expr::Expr::Literal(a) => {a}
+            _ => {unreachable!("2121")}
+        };
+
+        let v = match (sym_val, int) {
+            (Value::Integer(a), expr::Literal::Integer(b)) => {
+                Value::Integer(a-b)
+            }
+            (Value::Float(a), expr::Literal::Float(b)) => {
+                Value::Float(a-b)
+            }
+            _ => {panic!("no please don't make me -= things of different types")}
+        };
+        self.env.assign(sym.clone(), &v)?;
+
+        Ok(v)
+    }
+
+    fn multiplication(&mut self, sym: &expr::Expr, val_expr: &expr::Expr) -> Result<Value, String> {
+
+        let sym_inner = match sym {
+            expr::Expr::Variable(s) => {s}
+            _ => {unreachable!("12")}
+        };
+        let sym_val = self.lookup(sym_inner)?;
+        let int = match val_expr {
+            expr::Expr::Literal(a) => {a}
+            _ => {unreachable!("2121")}
+        };
+
+        let v = match (sym_val, int) {
+            (Value::Integer(a), expr::Literal::Integer(b)) => {
+                Value::Integer(a*b)
+            }
+            (Value::Float(a), expr::Literal::Float(b)) => {
+                Value::Float(a*b)
+            }
+            _ => {panic!("no please don't make me *= things of different types")}
+        };
+        self.env.assign(sym.clone(), &v)?;
+
+        Ok(v)
+    }
+
+    fn division(&mut self, sym: &expr::Expr, val_expr: &expr::Expr) -> Result<Value, String> {
+
+        let sym_inner = match sym {
+            expr::Expr::Variable(s) => {s}
+            _ => {unreachable!("12")}
+        };
+        let sym_val = self.lookup(sym_inner)?;
+        let int = match val_expr {
+            expr::Expr::Literal(a) => {a}
+            _ => {unreachable!("2121")}
+        };
+
+        let v = match (sym_val, int) {
+            (Value::Integer(a), expr::Literal::Integer(b)) => {
+                Value::Integer(a/b)
+            }
+            (Value::Float(a), expr::Literal::Float(b)) => {
+                Value::Float(a/b)
+            }
+            _ => {panic!("no please don't make me /= things of different types")}
+        };
+        self.env.assign(sym.clone(), &v)?;
+
+        Ok(v)
+    }
+
+    fn modulus(&mut self, sym: &expr::Expr, val_expr: &expr::Expr) -> Result<Value,String> {
+
+        let sym_inner = match sym {
+            expr::Expr::Variable(s) => {s}
+            _ => {unreachable!("22")}
+        };
+        let sym_val = self.lookup(sym_inner)?;
+        let int = match val_expr {
+            expr::Expr::Literal(a) => {a}
+            _ => {unreachable!("2222")}
+        };
+
+        let v = match (sym_val, int) {
+            (Value::Integer(a), expr::Literal::Integer(b)) => {
+                Value::Integer((a).rem_euclid(*b))
+            }
+            (Value::Float(a), expr::Literal::Float(b)) => {
+                Value::Float((a).rem_euclid(*b))
+            }
+            _ => {panic!("no please don't make me %= things of different types")}
+        };
+        self.env.assign(sym.clone(), &v)?;
+
+        Ok(v)
+    }
+
+    fn bitwise_or(&mut self, sym: &expr::Expr, val_expr: &expr::Expr) -> Result<Value, String> {
+
+        let sym_inner = match sym {
+            expr::Expr::Variable(s) => {s}
+            _ => {unreachable!("22")}
+        };
+        let sym_val = self.lookup(sym_inner)?;
+        let int = match val_expr {
+            expr::Expr::Literal(a) => {a}
+            _ => {unreachable!("2222")}
+        };
+
+        let v = match (sym_val, int) {
+            (Value::Integer(a), expr::Literal::Integer(b)) => {
+                Value::Integer(a|b)
+            }
+            (Value::Float(_), expr::Literal::Float(_)) => {
+                panic!("Assignment operator |= not possible for type FLOAT");
+            }
+            _ => {panic!("no please don't make me |= things of different types")}
+        };
+        self.env.assign(sym.clone(), &v)?;
+
+        Ok(v)
+    }
+
+    fn bitwise_and(&mut self, sym: &expr::Expr, val_expr: &expr::Expr) -> Result<Value, String> {
+
+        let sym_inner = match sym {
+            expr::Expr::Variable(s) => {s}
+            _ => {unreachable!("22")}
+        };
+        let sym_val = self.lookup(sym_inner)?;
+        let int = match val_expr {
+            expr::Expr::Literal(a) => {a}
+            _ => {unreachable!("2222")}
+        };
+
+        let v = match (sym_val, int) {
+            (Value::Integer(a), expr::Literal::Integer(b)) => {
+                Value::Integer(a&b)
+            }
+            (Value::Float(_), expr::Literal::Float(_)) => {
+                panic!("Assignment operator &= not possible for type FLOAT");
+            }
+            _ => {panic!("no please don't make me &= things of different types")}
+        };
+        self.env.assign(sym.clone(), &v)?;
+
+        Ok(v)
+    }
+
+    fn bitwise_xor(&mut self, sym: &expr::Expr, val_expr: &expr::Expr) -> Result<Value, String> {
+
+        let sym_inner = match sym {
+            expr::Expr::Variable(s) => {s}
+            _ => {unreachable!("22")}
+        };
+        let sym_val = self.lookup(sym_inner)?;
+        let int = match val_expr {
+            expr::Expr::Literal(a) => {a}
+            _ => {unreachable!("2222")}
+        };
+
+        let v = match (sym_val, int) {
+            (Value::Integer(a), expr::Literal::Integer(b)) => {
+                Value::Integer(a^b)
+            }
+            (Value::Float(_), expr::Literal::Float(_)) => {
+                panic!("Assignment operator ^= not possible for type FLOAT");
+            }
+            _ => {panic!("no please don't make me ^= things of different types")}
+        };
+        self.env.assign(sym.clone(), &v)?;
+
+        Ok(v)
+    }
+
+    fn left_shift(&mut self, sym: &expr::Expr, val_expr: &expr::Expr) -> Result<Value, String> {
+
+        let sym_inner = match sym {
+            expr::Expr::Variable(s) => {s}
+            _ => {unreachable!("22")}
+        };
+        let sym_val = self.lookup(sym_inner)?;
+        let int = match val_expr {
+            expr::Expr::Literal(a) => {a}
+            _ => {unreachable!("2222")}
+        };
+
+        let v = match (sym_val, int) {
+            (Value::Integer(a), expr::Literal::Integer(b)) => {
+                Value::Integer(a<<b)
+            }
+            (Value::Float(_), expr::Literal::Float(_)) => {
+                panic!("Assignment operator <<= not possible for type FLOAT");
+            }
+            _ => {panic!("no please don't make me <<= things of different types")}
+        };
+        self.env.assign(sym.clone(), &v)?;
+
+        Ok(v)
+    }
+
+    fn right_shift(&mut self, sym: &expr::Expr, val_expr: &expr::Expr) -> Result<Value, String> {
+
+        let sym_inner = match sym {
+            expr::Expr::Variable(s) => {s}
+            _ => {unreachable!("22")}
+        };
+        let sym_val = self.lookup(sym_inner)?;
+        let int = match val_expr {
+            expr::Expr::Literal(a) => {a}
+            _ => {unreachable!("2222")}
+        };
+
+        let v = match (sym_val, int) {
+            (Value::Integer(a), expr::Literal::Integer(b)) => {
+                Value::Integer(a>>b)
+            }
+            (Value::Float(_), expr::Literal::Float(_)) => {
+                panic!("Assignment operator >>= not possible for type FLOAT");
+            }
+            _ => {panic!("no please don't make me >>= things of different types")}
+        };
+        self.env.assign(sym.clone(), &v)?;
+
+        Ok(v)
+    }
+
+    fn rotate_left(&mut self, sym: &expr::Expr, val_expr: &expr::Expr) -> Result<Value, String> {
+
+        let sym_inner = match sym {
+            expr::Expr::Variable(s) => {s}
+            _ => {unreachable!("22")}
+        };
+        let sym_val = self.lookup(sym_inner)?;
+        let int = match val_expr {
+            expr::Expr::Literal(a) => {a}
+            _ => {unreachable!("2222")}
+        };
+
+        let v = match (sym_val, int) {
+            (Value::Integer(a), expr::Literal::Integer(b)) => {
+                Value::Integer(a.rotate_left(*b as u32))
+            }
+            (Value::Float(_), expr::Literal::Float(_)) => {
+                panic!("Assignment operator rol= not possible for type FLOAT");
+            }
+            _ => {panic!("no please don't make me rol= things of different types")}
+        };
+        self.env.assign(sym.clone(), &v)?;
+
+        Ok(v)
+    }
+
+    fn rotate_right(&mut self, sym: &expr::Expr, val_expr: &expr::Expr) -> Result<Value, String> {
+
+        let sym_inner = match sym {
+            expr::Expr::Variable(s) => {s}
+            _ => {unreachable!("22")}
+        };
+        let sym_val = self.lookup(sym_inner)?;
+        let int = match val_expr {
+            expr::Expr::Literal(a) => {a}
+            _ => {unreachable!("2222")}
+        };
+
+        let v = match (sym_val, int) {
+            (Value::Integer(a), expr::Literal::Integer(b)) => {
+                Value::Integer(a.rotate_right(*b as u32))
+            }
+            (Value::Float(_), expr::Literal::Float(_)) => {
+                panic!("Assignment operator ror= not possible for type FLOAT");
+            }
+            _ => {panic!("no please don't make me ror= things of different types")}
+        };
+        self.env.assign(sym.clone(), &v)?;
+
+        Ok(v)
+    }
+
+    fn logical_and(&mut self, sym: &expr::Expr, val_expr: &expr::Expr) -> Result<Value, String> {
+
+        let sym_inner = match sym {
+            expr::Expr::Variable(s) => {s}
+            _ => {unreachable!("22")}
+        };
+        let sym_val = self.lookup(sym_inner)?;
+        let int = match val_expr {
+            expr::Expr::Literal(a) => {
+                match a {
+                    expr::Literal::True => {Value::Bool(true)}
+                    expr::Literal::False => {Value::Bool(false)}
+                    _ => {panic!("no please don't make me &&= things of different types, a: {:?} b: {:?}", sym_val, val_expr)}
+                }
+            }
+            expr::Expr::Variable(a) => {self.lookup(a)?.clone()}
+            _ => {panic!("no please don't make me &&= things of different types, a: {:?} b: {:?}", sym_val, val_expr)}
+        };
+
+        let v = match (sym_val, int) {
+            (Value::Bool(a), Value::Bool(b)) => {
+                Value::Bool(*a && b)
+            }
+            _ => {panic!("no please don't make me &&= things of different types, a: {:?} b: {:?}", sym_val, val_expr)}
+        };
+        self.env.assign(sym.clone(), &v)?;
+
+        Ok(v)
+    }
+
+    fn logical_or(&mut self, sym: &expr::Expr, val_expr: &expr::Expr) -> Result<Value, String> {
+        let sym_inner = match sym {
+            expr::Expr::Variable(s) => {s}
+            _ => {unreachable!("22")}
+        };
+        let sym_val = self.lookup(sym_inner)?;
+        let int = match val_expr {
+            expr::Expr::Literal(a) => {
+                match a {
+                    expr::Literal::True => {Value::Bool(true)}
+                    expr::Literal::False => {Value::Bool(false)}
+                    _ => {panic!("no please don't make me ||= things of different types, a: {:?} b: {:?}", sym_val, val_expr)}
+                }
+            }
+            expr::Expr::Variable(a) => {self.lookup(a)?.clone()}
+            _ => {panic!("no please don't make me ||= things of different types, a: {:?} b: {:?}", sym_val, val_expr)}
+        };
+
+        let v = match (sym_val, int) {
+            (Value::Bool(a), Value::Bool(b)) => {
+                Value::Bool(*a || b)
+            }
+            _ => {panic!("no please don't make me ||= things of different types, a: {:?} b: {:?}", sym_val, val_expr)}
+        };
+        self.env.assign(sym.clone(), &v)?;
+
+        Ok(v)
     }
 
     fn call(
@@ -758,7 +813,7 @@ impl Interpreter {
     ) -> Result<Value, String> {
         let callee = self.interpret_expr(callee_expr)?;
 
-        match as_callable(&self, &callee) {
+        match as_callable(self, &callee) {
             Some(callable) => {
                 let maybe_args: Result<Vec<_>, _> = arg_exprs
                     .iter()
@@ -767,7 +822,9 @@ impl Interpreter {
 
                 match maybe_args {
                     Ok(args) => {
-                        if args.len() != callable.arity(self).into() {
+                        if args.len() == callable.arity(self).into() {
+                            callable.call(self, &args)
+                        } else {
                             Err(format!(
                                 "Invalid call at line={},col={}: callee has arity {}, but \
                                          was called with {} arguments",
@@ -776,8 +833,6 @@ impl Interpreter {
                                 callable.arity(self),
                                 args.len()
                             ))
-                        } else {
-                            callable.call(self, &args)
                         }
                     }
                     Err(err) => Err(err),
@@ -816,9 +871,9 @@ impl Interpreter {
                 Ok(Value::String(format!("{}{}", s1, s2)))
             }
             (_, expr::BinaryOpTy::EqualEqual, _) => {
-                Ok(Value::Bool(Interpreter::equals(&lhs, &rhs)))
+                Ok(Value::Bool(Self::equals(&lhs, &rhs)))
             }
-            (_, expr::BinaryOpTy::NotEqual, _) => Ok(Value::Bool(!Interpreter::equals(&lhs, &rhs))),
+            (_, expr::BinaryOpTy::NotEqual, _) => Ok(Value::Bool(!Self::equals(&lhs, &rhs))),
             _ => Err(format!(
                 "invalid operands in binary operator {:?} of type {:?} and {:?} at line={},col={}",
                 op.ty,
@@ -845,11 +900,11 @@ impl Interpreter {
         let val = self.interpret_expr(expr)?;
 
         match (op.ty, &val) {
-            (expr::UnaryOpTy::Bang, _) => Ok(Value::Bool(!Interpreter::is_truthy(&val))),
+            (expr::UnaryOpTy::Bang, _) => Ok(Value::Bool(!Self::is_truthy(&val))),
         }
     }
 
-    fn is_truthy(val: &Value) -> bool {
+    const fn is_truthy(val: &Value) -> bool {
         match val {
             Value::Nil => false,
             Value::Bool(b) => *b,
@@ -865,9 +920,7 @@ impl Interpreter {
             expr::Literal::False => Value::Bool(false),
             expr::Literal::Float(n) => {Value::Float(*n)}
             expr::Literal::Integer(n) => {Value::Integer(*n)}
-            expr::Literal::Duration(_, _) => {todo!()}
-            expr::Literal::AclEntry(_, _) => {todo!()}
-            expr::Literal::Percent(_) => {todo!()}
+            expr::Literal::Duration(_, _) | expr::Literal::AclEntry(_, _) | expr::Literal::Percent(_) => {todo!()}
         }
     }
 }
