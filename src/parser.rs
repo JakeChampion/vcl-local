@@ -860,23 +860,26 @@ impl Parser {
 
     fn set_statement(&mut self) -> Result<expr::Stmt, Error> {
         let identifier = self.primary()?;
-        if self.match_one_of(vec![
-            scanner::TokenType::Equal,
-            scanner::TokenType::Subtraction,
-            scanner::TokenType::Addition,
-            scanner::TokenType::Multiplication,
-            scanner::TokenType::Division,
-            scanner::TokenType::Modulus,
-            scanner::TokenType::BitwiseOr,
-            scanner::TokenType::BitwiseAnd,
-            scanner::TokenType::BitwiseXor,
-            scanner::TokenType::LeftShift,
-            scanner::TokenType::RightShift,
-            scanner::TokenType::LeftRotate,
-            scanner::TokenType::RightRotate,
-            scanner::TokenType::LogicalAnd,
-            scanner::TokenType::LogicalOr,
-        ].as_ref()) {
+        if self.match_one_of(
+            vec![
+                scanner::TokenType::Equal,
+                scanner::TokenType::Subtraction,
+                scanner::TokenType::Addition,
+                scanner::TokenType::Multiplication,
+                scanner::TokenType::Division,
+                scanner::TokenType::Modulus,
+                scanner::TokenType::BitwiseOr,
+                scanner::TokenType::BitwiseAnd,
+                scanner::TokenType::BitwiseXor,
+                scanner::TokenType::LeftShift,
+                scanner::TokenType::RightShift,
+                scanner::TokenType::LeftRotate,
+                scanner::TokenType::RightRotate,
+                scanner::TokenType::LogicalAnd,
+                scanner::TokenType::LogicalOr,
+            ]
+            .as_ref(),
+        ) {
             let token = self.previous().clone();
             let assignment_type = match token.ty {
                 scanner::TokenType::Equal => expr::Assignment::Assign,
@@ -901,9 +904,14 @@ impl Parser {
             };
             let value = self.addition()?;
 
+            self.consume(
+                scanner::TokenType::Semicolon,
+                "Expected ; after set statement",
+            )?;
+
             match identifier {
                 expr::Expr::Get(_, _) | expr::Expr::Variable(_) => {
-                    return Ok(expr::Stmt::Set(identifier, assignment_type, value))
+                    return Ok(expr::Stmt::Set(identifier, assignment_type, value));
                     // return Ok(assignment_type(Box::new(expr), Box::new(value)));
                 }
                 _ => {
@@ -1072,12 +1080,15 @@ impl Parser {
     fn comparison(&mut self) -> Result<expr::Expr, Error> {
         let mut expr = self.addition()?;
 
-        while self.match_one_of(vec![
-            scanner::TokenType::Greater,
-            scanner::TokenType::GreaterEqual,
-            scanner::TokenType::Less,
-            scanner::TokenType::LessEqual,
-        ].as_ref()) {
+        while self.match_one_of(
+            vec![
+                scanner::TokenType::Greater,
+                scanner::TokenType::GreaterEqual,
+                scanner::TokenType::Less,
+                scanner::TokenType::LessEqual,
+            ]
+            .as_ref(),
+        ) {
             let operator_token = self.previous().clone();
             let right = Box::new(self.addition()?);
             let binop_maybe = Self::op_token_to_binop(&operator_token);
@@ -1096,7 +1107,8 @@ impl Parser {
     fn addition(&mut self) -> Result<expr::Expr, Error> {
         let mut expr = self.unary()?;
 
-        while self.match_one_of(vec![scanner::TokenType::Plus, scanner::TokenType::String].as_ref()) {
+        while self.match_one_of(vec![scanner::TokenType::Plus, scanner::TokenType::String].as_ref())
+        {
             let operator_token = self.previous().clone();
             let right = if operator_token.ty == scanner::TokenType::String {
                 Box::new(Self::string(&operator_token)?)
@@ -1456,10 +1468,13 @@ impl Parser {
     fn equality(&mut self) -> Result<expr::Expr, Error> {
         let mut expr = self.match_regex_or_acl()?;
 
-        while self.match_one_of(vec![
-            scanner::TokenType::BangEqual,
-            scanner::TokenType::EqualEqual,
-        ].as_ref()) {
+        while self.match_one_of(
+            vec![
+                scanner::TokenType::BangEqual,
+                scanner::TokenType::EqualEqual,
+            ]
+            .as_ref(),
+        ) {
             let operator_token = self.previous().clone();
             let right = Box::new(self.match_regex_or_acl()?);
 
@@ -1479,10 +1494,9 @@ impl Parser {
     fn match_regex_or_acl(&mut self) -> Result<expr::Expr, Error> {
         let mut expr = self.comparison()?;
 
-        while self.match_one_of(vec![
-            scanner::TokenType::BangTilde,
-            scanner::TokenType::Tilde,
-        ].as_ref()) {
+        while self
+            .match_one_of(vec![scanner::TokenType::BangTilde, scanner::TokenType::Tilde].as_ref())
+        {
             let operator_token = self.previous().clone();
             let right = Box::new(self.comparison()?);
 
