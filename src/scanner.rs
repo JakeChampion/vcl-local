@@ -248,7 +248,7 @@ impl Scanner {
             '-' => {
                 if self.matches('=') {
                     self.add_token(TokenType::Subtraction)
-                } else if Scanner::is_decimal_digit(self.peek()) {
+                } else if Self::is_decimal_digit(self.peek()) {
                     self.number_or_duration()
                 }
             }
@@ -375,9 +375,9 @@ impl Scanner {
                 self.string_or_acl()
             }
             _ => {
-                if Scanner::is_decimal_digit(c) {
+                if Self::is_decimal_digit(c) {
                     self.number_or_duration()
-                } else if Scanner::is_alpha(c) {
+                } else if Self::is_alpha(c) {
                     if let Some(token) = self.tokens.last() {
                         if token.ty == TokenType::Dot {
                             return self.identifier();
@@ -495,7 +495,7 @@ impl Scanner {
             return self.add_token(TokenType::SyntheticBase64);
         }
 
-        while Scanner::is_alphanumericunderscoredash(self.peek()) {
+        while Self::is_alphanumericunderscoredash(self.peek()) {
             self.advance();
         }
         let literal_val =
@@ -535,11 +535,11 @@ impl Scanner {
         let is_hex = self.previous() == '0' && self.peek() == 'x';
         if is_hex {
             self.advance();
-            while Scanner::is_hex_digit(self.peek()) {
+            while Self::is_hex_digit(self.peek()) {
                 self.advance();
             }
         } else {
-            while Scanner::is_decimal_digit(self.peek()) {
+            while Self::is_decimal_digit(self.peek()) {
                 self.advance();
             }
         }
@@ -580,11 +580,11 @@ impl Scanner {
 
         if self.matches('.') {
             if is_hex {
-                while Scanner::is_hex_digit(self.peek()) {
+                while Self::is_hex_digit(self.peek()) {
                     self.advance();
                 }
             } else {
-                while Scanner::is_decimal_digit(self.peek()) {
+                while Self::is_decimal_digit(self.peek()) {
                     self.advance();
                 }
             }
@@ -594,7 +594,7 @@ impl Scanner {
                 if self.peek() == '-' || self.peek() == '+' {
                     self.advance();
                 }
-                while Scanner::is_decimal_digit(self.peek()) {
+                while Self::is_decimal_digit(self.peek()) {
                     self.advance();
                 }
                 let lit =
@@ -619,7 +619,7 @@ impl Scanner {
             if self.peek() == '-' || self.peek() == '+' {
                 self.advance();
             }
-            while Scanner::is_decimal_digit(self.peek()) {
+            while Self::is_decimal_digit(self.peek()) {
                 self.advance();
             }
             let lit = String::from_utf8(self.source[self.start..self.current].to_vec()).unwrap();
@@ -804,14 +804,14 @@ mod tests {
             vec![
                 Token {
                     ty: TokenType::LeftParen,
-                    lexeme: "(".as_bytes().to_vec(),
+                    lexeme: b"(".to_vec(),
                     literal: None,
                     line: 1,
                     col: 0,
                 },
                 Token {
                     ty: TokenType::Eof,
-                    lexeme: "".as_bytes().to_vec(),
+                    lexeme: b"".to_vec(),
                     literal: None,
                     line: 1,
                     col: 0
@@ -825,14 +825,14 @@ mod tests {
             vec![
                 Token {
                     ty: TokenType::RightParen,
-                    lexeme: ")".as_bytes().to_vec(),
+                    lexeme: b")".to_vec(),
                     literal: None,
                     line: 1,
                     col: 0,
                 },
                 Token {
                     ty: TokenType::Eof,
-                    lexeme: "".as_bytes().to_vec(),
+                    lexeme: b"".to_vec(),
                     literal: None,
                     line: 1,
                     col: 0
@@ -846,14 +846,14 @@ mod tests {
             vec![
                 Token {
                     ty: TokenType::Comma,
-                    lexeme: ",".as_bytes().to_vec(),
+                    lexeme: b",".to_vec(),
                     literal: None,
                     line: 1,
                     col: 0,
                 },
                 Token {
                     ty: TokenType::Eof,
-                    lexeme: "".as_bytes().to_vec(),
+                    lexeme: b"".to_vec(),
                     literal: None,
                     line: 1,
                     col: 0
@@ -867,14 +867,14 @@ mod tests {
             vec![
                 Token {
                     ty: TokenType::LeftBrace,
-                    lexeme: "{".as_bytes().to_vec(),
+                    lexeme: b"{".to_vec(),
                     literal: None,
                     line: 1,
                     col: 0,
                 },
                 Token {
                     ty: TokenType::Eof,
-                    lexeme: "".as_bytes().to_vec(),
+                    lexeme: b"".to_vec(),
                     literal: None,
                     line: 1,
                     col: 0
@@ -888,14 +888,14 @@ mod tests {
             vec![
                 Token {
                     ty: TokenType::RightBrace,
-                    lexeme: "}".as_bytes().to_vec(),
+                    lexeme: b"}".to_vec(),
                     literal: None,
                     line: 1,
                     col: 0,
                 },
                 Token {
                     ty: TokenType::Eof,
-                    lexeme: "".as_bytes().to_vec(),
+                    lexeme: b"".to_vec(),
                     literal: None,
                     line: 1,
                     col: 0
@@ -909,14 +909,14 @@ mod tests {
             vec![
                 Token {
                     ty: TokenType::LeftBracket,
-                    lexeme: "[".as_bytes().to_vec(),
+                    lexeme: b"[".to_vec(),
                     literal: None,
                     line: 1,
                     col: 0,
                 },
                 Token {
                     ty: TokenType::Eof,
-                    lexeme: "".as_bytes().to_vec(),
+                    lexeme: b"".to_vec(),
                     literal: None,
                     line: 1,
                     col: 0
@@ -930,14 +930,14 @@ mod tests {
             vec![
                 Token {
                     ty: TokenType::RightBracket,
-                    lexeme: "]".as_bytes().to_vec(),
+                    lexeme: b"]".to_vec(),
                     literal: None,
                     line: 1,
                     col: 0,
                 },
                 Token {
                     ty: TokenType::Eof,
-                    lexeme: "".as_bytes().to_vec(),
+                    lexeme: b"".to_vec(),
                     literal: None,
                     line: 1,
                     col: 0
@@ -951,14 +951,14 @@ mod tests {
             vec![
                 Token {
                     ty: TokenType::Dot,
-                    lexeme: ".".as_bytes().to_vec(),
+                    lexeme: b".".to_vec(),
                     literal: None,
                     line: 1,
                     col: 0,
                 },
                 Token {
                     ty: TokenType::Eof,
-                    lexeme: "".as_bytes().to_vec(),
+                    lexeme: b"".to_vec(),
                     literal: None,
                     line: 1,
                     col: 0
@@ -972,14 +972,14 @@ mod tests {
             vec![
                 Token {
                     ty: TokenType::Integer,
-                    lexeme: "-9223372036854775808".as_bytes().to_vec(),
+                    lexeme: b"-9223372036854775808".to_vec(),
                     literal: Some(Literal::Integer(-9_223_372_036_854_775_808)),
                     line: 1,
                     col: 19,
                 },
                 Token {
                     ty: TokenType::Eof,
-                    lexeme: "".as_bytes().to_vec(),
+                    lexeme: b"".to_vec(),
                     literal: None,
                     line: 1,
                     col: 19
@@ -993,14 +993,14 @@ mod tests {
             vec![
                 Token {
                     ty: TokenType::Integer,
-                    lexeme: "-0x8000000000000000".as_bytes().to_vec(),
+                    lexeme: b"-0x8000000000000000".to_vec(),
                     literal: Some(Literal::Integer(-9_223_372_036_854_775_808)),
                     line: 1,
                     col: 18,
                 },
                 Token {
                     ty: TokenType::Eof,
-                    lexeme: "".as_bytes().to_vec(),
+                    lexeme: b"".to_vec(),
                     literal: None,
                     line: 1,
                     col: 18
@@ -1014,14 +1014,14 @@ mod tests {
             vec![
                 Token {
                     ty: TokenType::Plus,
-                    lexeme: "+".as_bytes().to_vec(),
+                    lexeme: b"+".to_vec(),
                     literal: None,
                     line: 1,
                     col: 0,
                 },
                 Token {
                     ty: TokenType::Eof,
-                    lexeme: "".as_bytes().to_vec(),
+                    lexeme: b"".to_vec(),
                     literal: None,
                     line: 1,
                     col: 0
@@ -1035,14 +1035,14 @@ mod tests {
             vec![
                 Token {
                     ty: TokenType::Star,
-                    lexeme: "*".as_bytes().to_vec(),
+                    lexeme: b"*".to_vec(),
                     literal: None,
                     line: 1,
                     col: 0,
                 },
                 Token {
                     ty: TokenType::Eof,
-                    lexeme: "".as_bytes().to_vec(),
+                    lexeme: b"".to_vec(),
                     literal: None,
                     line: 1,
                     col: 0
@@ -1056,14 +1056,14 @@ mod tests {
             vec![
                 Token {
                     ty: TokenType::Semicolon,
-                    lexeme: ";".as_bytes().to_vec(),
+                    lexeme: b";".to_vec(),
                     literal: None,
                     line: 1,
                     col: 0,
                 },
                 Token {
                     ty: TokenType::Eof,
-                    lexeme: "".as_bytes().to_vec(),
+                    lexeme: b"".to_vec(),
                     literal: None,
                     line: 1,
                     col: 0
@@ -1077,14 +1077,14 @@ mod tests {
             vec![
                 Token {
                     ty: TokenType::Slash,
-                    lexeme: "/".as_bytes().to_vec(),
+                    lexeme: b"/".to_vec(),
                     literal: None,
                     line: 1,
                     col: 0,
                 },
                 Token {
                     ty: TokenType::Eof,
-                    lexeme: "".as_bytes().to_vec(),
+                    lexeme: b"".to_vec(),
                     literal: None,
                     line: 1,
                     col: 0
@@ -1098,14 +1098,14 @@ mod tests {
             vec![
                 Token {
                     ty: TokenType::Bang,
-                    lexeme: "!".as_bytes().to_vec(),
+                    lexeme: b"!".to_vec(),
                     literal: None,
                     line: 1,
                     col: 0,
                 },
                 Token {
                     ty: TokenType::Eof,
-                    lexeme: "".as_bytes().to_vec(),
+                    lexeme: b"".to_vec(),
                     literal: None,
                     line: 1,
                     col: 0
@@ -1118,14 +1118,14 @@ mod tests {
             vec![
                 Token {
                     ty: TokenType::Colon,
-                    lexeme: ":".as_bytes().to_vec(),
+                    lexeme: b":".to_vec(),
                     literal: None,
                     line: 1,
                     col: 0,
                 },
                 Token {
                     ty: TokenType::Eof,
-                    lexeme: "".as_bytes().to_vec(),
+                    lexeme: b"".to_vec(),
                     literal: None,
                     line: 1,
                     col: 0
@@ -1138,14 +1138,14 @@ mod tests {
             vec![
                 Token {
                     ty: TokenType::Subtraction,
-                    lexeme: "-=".as_bytes().to_vec(),
+                    lexeme: b"-=".to_vec(),
                     literal: None,
                     line: 1,
                     col: 1,
                 },
                 Token {
                     ty: TokenType::Eof,
-                    lexeme: "".as_bytes().to_vec(),
+                    lexeme: b"".to_vec(),
                     literal: None,
                     line: 1,
                     col: 1
@@ -1159,14 +1159,14 @@ mod tests {
             vec![
                 Token {
                     ty: TokenType::Modulus,
-                    lexeme: "%=".as_bytes().to_vec(),
+                    lexeme: b"%=".to_vec(),
                     literal: None,
                     line: 1,
                     col: 1,
                 },
                 Token {
                     ty: TokenType::Eof,
-                    lexeme: "".as_bytes().to_vec(),
+                    lexeme: b"".to_vec(),
                     literal: None,
                     line: 1,
                     col: 1
@@ -1180,14 +1180,14 @@ mod tests {
             vec![
                 Token {
                     ty: TokenType::BitwiseXor,
-                    lexeme: "^=".as_bytes().to_vec(),
+                    lexeme: b"^=".to_vec(),
                     literal: None,
                     line: 1,
                     col: 1,
                 },
                 Token {
                     ty: TokenType::Eof,
-                    lexeme: "".as_bytes().to_vec(),
+                    lexeme: b"".to_vec(),
                     literal: None,
                     line: 1,
                     col: 1
@@ -1201,14 +1201,14 @@ mod tests {
             vec![
                 Token {
                     ty: TokenType::Addition,
-                    lexeme: "+=".as_bytes().to_vec(),
+                    lexeme: b"+=".to_vec(),
                     literal: None,
                     line: 1,
                     col: 1
                 },
                 Token {
                     ty: TokenType::Eof,
-                    lexeme: "".as_bytes().to_vec(),
+                    lexeme: b"".to_vec(),
                     literal: None,
                     line: 1,
                     col: 1
@@ -1222,14 +1222,14 @@ mod tests {
             vec![
                 Token {
                     ty: TokenType::Multiplication,
-                    lexeme: "*=".as_bytes().to_vec(),
+                    lexeme: b"*=".to_vec(),
                     literal: None,
                     line: 1,
                     col: 1
                 },
                 Token {
                     ty: TokenType::Eof,
-                    lexeme: "".as_bytes().to_vec(),
+                    lexeme: b"".to_vec(),
                     literal: None,
                     line: 1,
                     col: 1
@@ -1242,14 +1242,14 @@ mod tests {
             vec![
                 Token {
                     ty: TokenType::Tilde,
-                    lexeme: "~".as_bytes().to_vec(),
+                    lexeme: b"~".to_vec(),
                     literal: None,
                     line: 1,
                     col: 0
                 },
                 Token {
                     ty: TokenType::Eof,
-                    lexeme: "".as_bytes().to_vec(),
+                    lexeme: b"".to_vec(),
                     literal: None,
                     line: 1,
                     col: 0
@@ -1262,14 +1262,14 @@ mod tests {
             vec![
                 Token {
                     ty: TokenType::BangTilde,
-                    lexeme: "!~".as_bytes().to_vec(),
+                    lexeme: b"!~".to_vec(),
                     literal: None,
                     line: 1,
                     col: 1
                 },
                 Token {
                     ty: TokenType::Eof,
-                    lexeme: "".as_bytes().to_vec(),
+                    lexeme: b"".to_vec(),
                     literal: None,
                     line: 1,
                     col: 1
@@ -1282,14 +1282,14 @@ mod tests {
             vec![
                 Token {
                     ty: TokenType::BangEqual,
-                    lexeme: "!=".as_bytes().to_vec(),
+                    lexeme: b"!=".to_vec(),
                     literal: None,
                     line: 1,
                     col: 1
                 },
                 Token {
                     ty: TokenType::Eof,
-                    lexeme: "".as_bytes().to_vec(),
+                    lexeme: b"".to_vec(),
                     literal: None,
                     line: 1,
                     col: 1
@@ -1302,14 +1302,14 @@ mod tests {
             vec![
                 Token {
                     ty: TokenType::Equal,
-                    lexeme: "=".as_bytes().to_vec(),
+                    lexeme: b"=".to_vec(),
                     literal: None,
                     line: 1,
                     col: 0
                 },
                 Token {
                     ty: TokenType::Eof,
-                    lexeme: "".as_bytes().to_vec(),
+                    lexeme: b"".to_vec(),
                     literal: None,
                     line: 1,
                     col: 0
@@ -1322,14 +1322,14 @@ mod tests {
             vec![
                 Token {
                     ty: TokenType::EqualEqual,
-                    lexeme: "==".as_bytes().to_vec(),
+                    lexeme: b"==".to_vec(),
                     literal: None,
                     line: 1,
                     col: 1
                 },
                 Token {
                     ty: TokenType::Eof,
-                    lexeme: "".as_bytes().to_vec(),
+                    lexeme: b"".to_vec(),
                     literal: None,
                     line: 1,
                     col: 1
@@ -1342,14 +1342,14 @@ mod tests {
             vec![
                 Token {
                     ty: TokenType::LogicalOr,
-                    lexeme: "||=".as_bytes().to_vec(),
+                    lexeme: b"||=".to_vec(),
                     literal: None,
                     line: 1,
                     col: 2
                 },
                 Token {
                     ty: TokenType::Eof,
-                    lexeme: "".as_bytes().to_vec(),
+                    lexeme: b"".to_vec(),
                     literal: None,
                     line: 1,
                     col: 2
@@ -1362,14 +1362,14 @@ mod tests {
             vec![
                 Token {
                     ty: TokenType::Or,
-                    lexeme: "||".as_bytes().to_vec(),
+                    lexeme: b"||".to_vec(),
                     literal: None,
                     line: 1,
                     col: 1
                 },
                 Token {
                     ty: TokenType::Eof,
-                    lexeme: "".as_bytes().to_vec(),
+                    lexeme: b"".to_vec(),
                     literal: None,
                     line: 1,
                     col: 1
@@ -1382,14 +1382,14 @@ mod tests {
             vec![
                 Token {
                     ty: TokenType::BitwiseOr,
-                    lexeme: "|=".as_bytes().to_vec(),
+                    lexeme: b"|=".to_vec(),
                     literal: None,
                     line: 1,
                     col: 1
                 },
                 Token {
                     ty: TokenType::Eof,
-                    lexeme: "".as_bytes().to_vec(),
+                    lexeme: b"".to_vec(),
                     literal: None,
                     line: 1,
                     col: 1
@@ -1402,14 +1402,14 @@ mod tests {
             vec![
                 Token {
                     ty: TokenType::LogicalAnd,
-                    lexeme: "&&=".as_bytes().to_vec(),
+                    lexeme: b"&&=".to_vec(),
                     literal: None,
                     line: 1,
                     col: 2
                 },
                 Token {
                     ty: TokenType::Eof,
-                    lexeme: "".as_bytes().to_vec(),
+                    lexeme: b"".to_vec(),
                     literal: None,
                     line: 1,
                     col: 2
@@ -1422,14 +1422,14 @@ mod tests {
             vec![
                 Token {
                     ty: TokenType::And,
-                    lexeme: "&&".as_bytes().to_vec(),
+                    lexeme: b"&&".to_vec(),
                     literal: None,
                     line: 1,
                     col: 1
                 },
                 Token {
                     ty: TokenType::Eof,
-                    lexeme: "".as_bytes().to_vec(),
+                    lexeme: b"".to_vec(),
                     literal: None,
                     line: 1,
                     col: 1
@@ -1442,14 +1442,14 @@ mod tests {
             vec![
                 Token {
                     ty: TokenType::BitwiseAnd,
-                    lexeme: "&=".as_bytes().to_vec(),
+                    lexeme: b"&=".to_vec(),
                     literal: None,
                     line: 1,
                     col: 1
                 },
                 Token {
                     ty: TokenType::Eof,
-                    lexeme: "".as_bytes().to_vec(),
+                    lexeme: b"".to_vec(),
                     literal: None,
                     line: 1,
                     col: 1
@@ -1462,14 +1462,14 @@ mod tests {
             vec![
                 Token {
                     ty: TokenType::GreaterEqual,
-                    lexeme: ">=".as_bytes().to_vec(),
+                    lexeme: b">=".to_vec(),
                     literal: None,
                     line: 1,
                     col: 1
                 },
                 Token {
                     ty: TokenType::Eof,
-                    lexeme: "".as_bytes().to_vec(),
+                    lexeme: b"".to_vec(),
                     literal: None,
                     line: 1,
                     col: 1
@@ -1482,14 +1482,14 @@ mod tests {
             vec![
                 Token {
                     ty: TokenType::RightShift,
-                    lexeme: ">>=".as_bytes().to_vec(),
+                    lexeme: b">>=".to_vec(),
                     literal: None,
                     line: 1,
                     col: 2
                 },
                 Token {
                     ty: TokenType::Eof,
-                    lexeme: "".as_bytes().to_vec(),
+                    lexeme: b"".to_vec(),
                     literal: None,
                     line: 1,
                     col: 2
@@ -1502,14 +1502,14 @@ mod tests {
             vec![
                 Token {
                     ty: TokenType::LessEqual,
-                    lexeme: "<=".as_bytes().to_vec(),
+                    lexeme: b"<=".to_vec(),
                     literal: None,
                     line: 1,
                     col: 1
                 },
                 Token {
                     ty: TokenType::Eof,
-                    lexeme: "".as_bytes().to_vec(),
+                    lexeme: b"".to_vec(),
                     literal: None,
                     line: 1,
                     col: 1
@@ -1522,14 +1522,14 @@ mod tests {
             vec![
                 Token {
                     ty: TokenType::LeftShift,
-                    lexeme: "<<=".as_bytes().to_vec(),
+                    lexeme: b"<<=".to_vec(),
                     literal: None,
                     line: 1,
                     col: 2
                 },
                 Token {
                     ty: TokenType::Eof,
-                    lexeme: "".as_bytes().to_vec(),
+                    lexeme: b"".to_vec(),
                     literal: None,
                     line: 1,
                     col: 2
@@ -1543,14 +1543,14 @@ mod tests {
             vec![
                 Token {
                     ty: TokenType::Division,
-                    lexeme: "/=".as_bytes().to_vec(),
+                    lexeme: b"/=".to_vec(),
                     literal: None,
                     line: 1,
                     col: 1
                 },
                 Token {
                     ty: TokenType::Eof,
-                    lexeme: "".as_bytes().to_vec(),
+                    lexeme: b"".to_vec(),
                     literal: None,
                     line: 1,
                     col: 1
@@ -1564,14 +1564,14 @@ mod tests {
             vec![
                 Token {
                     ty: TokenType::LeftRotate,
-                    lexeme: "rol=".as_bytes().to_vec(),
+                    lexeme: b"rol=".to_vec(),
                     literal: None,
                     line: 1,
                     col: 3
                 },
                 Token {
                     ty: TokenType::Eof,
-                    lexeme: "".as_bytes().to_vec(),
+                    lexeme: b"".to_vec(),
                     literal: None,
                     line: 1,
                     col: 3
@@ -1584,14 +1584,14 @@ mod tests {
             vec![
                 Token {
                     ty: TokenType::RightRotate,
-                    lexeme: "ror=".as_bytes().to_vec(),
+                    lexeme: b"ror=".to_vec(),
                     literal: None,
                     line: 1,
                     col: 3
                 },
                 Token {
                     ty: TokenType::Eof,
-                    lexeme: "".as_bytes().to_vec(),
+                    lexeme: b"".to_vec(),
                     literal: None,
                     line: 1,
                     col: 3
@@ -1604,14 +1604,14 @@ mod tests {
             vec![
                 Token {
                     ty: TokenType::Duration,
-                    lexeme: "3600s".as_bytes().to_vec(),
+                    lexeme: b"3600s".to_vec(),
                     literal: Some(Literal::Duration(3600.0, DurationUnit::Seconds)),
                     line: 1,
                     col: 4
                 },
                 Token {
                     ty: TokenType::Eof,
-                    lexeme: "".as_bytes().to_vec(),
+                    lexeme: b"".to_vec(),
                     literal: None,
                     line: 1,
                     col: 4
@@ -1625,14 +1625,14 @@ mod tests {
             vec![
                 Token {
                     ty: TokenType::Duration,
-                    lexeme: "3600d".as_bytes().to_vec(),
+                    lexeme: b"3600d".to_vec(),
                     literal: Some(Literal::Duration(3600.0, DurationUnit::Days)),
                     line: 1,
                     col: 4
                 },
                 Token {
                     ty: TokenType::Eof,
-                    lexeme: "".as_bytes().to_vec(),
+                    lexeme: b"".to_vec(),
                     literal: None,
                     line: 1,
                     col: 4
@@ -1645,14 +1645,14 @@ mod tests {
             vec![
                 Token {
                     ty: TokenType::Duration,
-                    lexeme: "3600ms".as_bytes().to_vec(),
+                    lexeme: b"3600ms".to_vec(),
                     literal: Some(Literal::Duration(3600.0, DurationUnit::Milliseconds)),
                     line: 1,
                     col: 5
                 },
                 Token {
                     ty: TokenType::Eof,
-                    lexeme: "".as_bytes().to_vec(),
+                    lexeme: b"".to_vec(),
                     literal: None,
                     line: 1,
                     col: 5
@@ -1665,14 +1665,14 @@ mod tests {
             vec![
                 Token {
                     ty: TokenType::Duration,
-                    lexeme: "3600m".as_bytes().to_vec(),
+                    lexeme: b"3600m".to_vec(),
                     literal: Some(Literal::Duration(3600.0, DurationUnit::Minutes)),
                     line: 1,
                     col: 4
                 },
                 Token {
                     ty: TokenType::Eof,
-                    lexeme: "".as_bytes().to_vec(),
+                    lexeme: b"".to_vec(),
                     literal: None,
                     line: 1,
                     col: 4
@@ -1685,14 +1685,14 @@ mod tests {
             vec![
                 Token {
                     ty: TokenType::Duration,
-                    lexeme: "3600h".as_bytes().to_vec(),
+                    lexeme: b"3600h".to_vec(),
                     literal: Some(Literal::Duration(3600.0, DurationUnit::Hours)),
                     line: 1,
                     col: 4
                 },
                 Token {
                     ty: TokenType::Eof,
-                    lexeme: "".as_bytes().to_vec(),
+                    lexeme: b"".to_vec(),
                     literal: None,
                     line: 1,
                     col: 4
@@ -1705,14 +1705,14 @@ mod tests {
             vec![
                 Token {
                     ty: TokenType::Duration,
-                    lexeme: "3600y".as_bytes().to_vec(),
+                    lexeme: b"3600y".to_vec(),
                     literal: Some(Literal::Duration(3600.0, DurationUnit::Years)),
                     line: 1,
                     col: 4
                 },
                 Token {
                     ty: TokenType::Eof,
-                    lexeme: "".as_bytes().to_vec(),
+                    lexeme: b"".to_vec(),
                     literal: None,
                     line: 1,
                     col: 4
@@ -1726,14 +1726,14 @@ mod tests {
             vec![
                 Token {
                     ty: TokenType::SyntheticBase64,
-                    lexeme: "synthetic.base64".as_bytes().to_vec(),
+                    lexeme: b"synthetic.base64".to_vec(),
                     literal: None,
                     line: 1,
                     col: 15
                 },
                 Token {
                     ty: TokenType::Eof,
-                    lexeme: "".as_bytes().to_vec(),
+                    lexeme: b"".to_vec(),
                     literal: None,
                     line: 1,
                     col: 15
@@ -1747,98 +1747,98 @@ mod tests {
             vec![
                 Token {
                     ty: TokenType::Sub,
-                    lexeme: "sub".as_bytes().to_vec(),
+                    lexeme: b"sub".to_vec(),
                     literal: None,
                     line: 1,
                     col: 2
                 },
                 Token {
                     ty: TokenType::Identifier,
-                    lexeme: "vcl_recv".as_bytes().to_vec(),
+                    lexeme: b"vcl_recv".to_vec(),
                     literal: Some(Literal::Identifier("vcl_recv".to_string())),
                     line: 1,
                     col: 11
                 },
                 Token {
                     ty: TokenType::LeftBrace,
-                    lexeme: "{".as_bytes().to_vec(),
+                    lexeme: b"{".to_vec(),
                     literal: None,
                     line: 1,
                     col: 13
                 },
                 Token {
                     ty: TokenType::Set,
-                    lexeme: "set".as_bytes().to_vec(),
+                    lexeme: b"set".to_vec(),
                     literal: None,
                     line: 1,
                     col: 16
                 },
                 Token {
                     ty: TokenType::Identifier,
-                    lexeme: "req".as_bytes().to_vec(),
+                    lexeme: b"req".to_vec(),
                     literal: Some(Literal::Identifier("req".to_string())),
                     line: 1,
                     col: 20
                 },
                 Token {
                     ty: TokenType::Dot,
-                    lexeme: ".".as_bytes().to_vec(),
+                    lexeme: b".".to_vec(),
                     literal: None,
                     line: 1,
                     col: 21
                 },
                 Token {
                     ty: TokenType::Identifier,
-                    lexeme: "http".as_bytes().to_vec(),
+                    lexeme: b"http".to_vec(),
                     literal: Some(Literal::Identifier("http".to_string())),
                     line: 1,
                     col: 25
                 },
                 Token {
                     ty: TokenType::Dot,
-                    lexeme: ".".as_bytes().to_vec(),
+                    lexeme: b".".to_vec(),
                     literal: None,
                     line: 1,
                     col: 26
                 },
                 Token {
                     ty: TokenType::Identifier,
-                    lexeme: "a".as_bytes().to_vec(),
+                    lexeme: b"a".to_vec(),
                     literal: Some(Literal::Identifier("a".to_string())),
                     line: 1,
                     col: 27
                 },
                 Token {
                     ty: TokenType::Equal,
-                    lexeme: "=".as_bytes().to_vec(),
+                    lexeme: b"=".to_vec(),
                     literal: None,
                     line: 1,
                     col: 29
                 },
                 Token {
                     ty: TokenType::String,
-                    lexeme: "\"test\"".as_bytes().to_vec(),
+                    lexeme: b"\"test\"".to_vec(),
                     literal: Some(Literal::Str("test".to_string())),
                     line: 1,
                     col: 36
                 },
                 Token {
                     ty: TokenType::Semicolon,
-                    lexeme: ";".as_bytes().to_vec(),
+                    lexeme: b";".to_vec(),
                     literal: None,
                     line: 1,
                     col: 37
                 },
                 Token {
                     ty: TokenType::RightBrace,
-                    lexeme: "}".as_bytes().to_vec(),
+                    lexeme: b"}".to_vec(),
                     literal: None,
                     line: 1,
                     col: 38
                 },
                 Token {
                     ty: TokenType::Eof,
-                    lexeme: "".as_bytes().to_vec(),
+                    lexeme: b"".to_vec(),
                     literal: None,
                     line: 1,
                     col: 38
