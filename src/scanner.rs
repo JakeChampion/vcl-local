@@ -226,6 +226,8 @@ impl Scanner {
     }
 
     fn scan_token(&mut self) {
+        #![allow(clippy::too_many_lines)]
+        #![allow(clippy::cognitive_complexity)]    
         let c = self.advance();
 
         match c {
@@ -420,20 +422,29 @@ impl Scanner {
         )
     }
 
-    fn identifier_or_keyword_or_silly_assignment(&mut self) {
-        if self.previous() == 'r' && self.peek() == 'o' {
-            if self.peek_at(1) == 'l' && self.peek_at(2) == '=' {
+    fn is_rol(&mut self) -> bool {
+        if self.previous() == 'r' && self.peek() == 'o' && self.peek_at(1) == 'l' && self.peek_at(2) == '=' {
                 self.advance();
                 self.advance();
                 self.advance();
-                return self.add_token(TokenType::LeftRotate);
-            } else if self.peek_at(1) == 'r' && self.peek_at(2) == '=' {
+                true
+        } else {
+            false
+        }
+    }
+
+    fn is_ror(&mut self) -> bool {
+        if self.previous() == 'r' && self.peek() == 'o' && self.peek_at(1) == 'r' && self.peek_at(2) == '=' {
                 self.advance();
                 self.advance();
                 self.advance();
-                return self.add_token(TokenType::RightRotate);
-            }
-        } else if self.previous() == 'd'
+                true
+        } else {
+            false
+        }
+    }
+    fn is_declare(&mut self) -> bool {
+        if self.previous() == 'd'
             && self.peek() == 'e'
             && self.peek_at(1) == 'c'
             && self.peek_at(2) == 'l'
@@ -459,8 +470,12 @@ impl Scanner {
             self.advance();
             self.advance();
             self.advance();
-            return self.add_token(TokenType::Declare);
-        } else if self.previous() == 's'
+            true
+        } else { false}
+    }
+
+    fn synthetic_base64(&mut self) -> bool {
+        if self.previous() == 's'
             && self.peek() == 'y'
             && self.peek_at(1) == 'n'
             && self.peek_at(2) == 't'
@@ -492,6 +507,23 @@ impl Scanner {
             self.advance();
             self.advance();
             self.advance();
+            true
+        } else {
+            false
+        }
+    }
+
+    fn identifier_or_keyword_or_silly_assignment(&mut self) {
+        if self.is_rol() {
+            return self.add_token(TokenType::LeftRotate);
+        }
+        if self.is_ror() {
+            return self.add_token(TokenType::RightRotate);
+        }
+        if self.is_declare() {
+            return self.add_token(TokenType::Declare);
+        }
+        if self.synthetic_base64() {
             return self.add_token(TokenType::SyntheticBase64);
         }
 
@@ -527,6 +559,32 @@ impl Scanner {
         }
     }
 
+    fn duration(&mut self) {
+        let val: f64 = String::from_utf8(self.source[self.start..self.current].to_vec())
+                .unwrap()
+                .parse()
+                .unwrap();
+            let unit = match self.peek() {
+                's' => DurationUnit::Seconds,
+                'm' => {
+                    if self.peek_next() == 's' {
+                        DurationUnit::Milliseconds
+                    } else {
+                        DurationUnit::Minutes
+                    }
+                }
+                'h' => DurationUnit::Hours,
+                'd' => DurationUnit::Days,
+                'y' => DurationUnit::Years,
+                _ => unreachable!(),
+            };
+            if unit == DurationUnit::Milliseconds {
+                self.advance();
+            }
+            self.advance();
+            self.add_token_literal(TokenType::Duration, Some(Literal::Duration(val, unit)))
+    }
+
     fn number_or_duration(&mut self) {
         let is_neg = self.previous() == '-';
         if is_neg {
@@ -551,29 +609,7 @@ impl Scanner {
             || self.peek() == 'd'
             || self.peek() == 'y'
         {
-            let val: f64 = String::from_utf8(self.source[self.start..self.current].to_vec())
-                .unwrap()
-                .parse()
-                .unwrap();
-            let unit = match self.peek() {
-                's' => DurationUnit::Seconds,
-                'm' => {
-                    if self.peek_next() == 's' {
-                        DurationUnit::Milliseconds
-                    } else {
-                        DurationUnit::Minutes
-                    }
-                }
-                'h' => DurationUnit::Hours,
-                'd' => DurationUnit::Days,
-                'y' => DurationUnit::Years,
-                _ => unreachable!(),
-            };
-            if unit == DurationUnit::Milliseconds {
-                self.advance();
-            }
-            self.advance();
-            return self.add_token_literal(TokenType::Duration, Some(Literal::Duration(val, unit)));
+            return self.duration();
         }
 
         let int_lit = String::from_utf8(self.source[self.start..self.current].to_vec()).unwrap();
@@ -794,6 +830,9 @@ impl Scanner {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::too_many_lines)]
+    #![allow(clippy::cognitive_complexity)]
+
     use super::*;
 
     #[test]
