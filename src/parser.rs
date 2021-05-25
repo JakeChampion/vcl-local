@@ -199,10 +199,6 @@ impl Parser {
     }
 
     fn declaration(&mut self) -> Result<expr::Stmt, Error> {
-        if self.matches(scanner::TokenType::Declare) {
-            return self.var_decl();
-        }
-
         if self.matches(scanner::TokenType::Sub) {
             return Ok(expr::Stmt::SubDecl(self.sub_decl(&SubKind::Function)?));
         }
@@ -224,7 +220,7 @@ impl Parser {
         self.statement()
     }
 
-    fn var_decl(&mut self) -> Result<expr::Stmt, Error> {
+    fn declare_statement(&mut self) -> Result<expr::Stmt, Error> {
         let var_token = self
             .consume(scanner::TokenType::Identifier, "Expected var. prefix")?
             .clone();
@@ -765,28 +761,16 @@ impl Parser {
             return self.call_statement();
         }
 
-        if self.matches(scanner::TokenType::Esi) {
-            return self.esi_statement();
+        if self.matches(scanner::TokenType::Declare) {
+            return self.declare_statement();
         }
-
-        if self.matches(scanner::TokenType::Set) {
-            return self.set_statement();
-        }
-
-        if self.matches(scanner::TokenType::Unset) {
-            return self.unset_statement();
-        }
-
-        if self.matches(scanner::TokenType::Remove) {
-            return self.unset_statement();
-        }
-
-        if self.matches(scanner::TokenType::LeftBrace) {
-            return Ok(expr::Stmt::Block(self.block()?));
-        }
-
+        
         if self.matches(scanner::TokenType::Error) {
             return self.error_statement();
+        }
+
+        if self.matches(scanner::TokenType::Esi) {
+            return self.esi_statement();
         }
 
         if self.matches(scanner::TokenType::If) {
@@ -796,12 +780,27 @@ impl Parser {
         if self.matches(scanner::TokenType::Include) {
             return self.include_statement();
         }
+
         if self.matches(scanner::TokenType::Log) {
             return self.log_statement();
         }
+
+        if self.matches(scanner::TokenType::Remove) {
+            return self.unset_statement();
+        }
+        
         if self.matches(scanner::TokenType::Restart) {
             return self.restart_statement();
         }
+        
+        if self.matches(scanner::TokenType::Return) {
+            return self.return_statement();
+        }
+
+        if self.matches(scanner::TokenType::Set) {
+            return self.set_statement();
+        }
+
         if self.matches(scanner::TokenType::Synthetic) {
             return self.synthetic_statement();
         }
@@ -810,8 +809,12 @@ impl Parser {
             return self.synthetic_base64_statement();
         }
 
-        if self.matches(scanner::TokenType::Return) {
-            return self.return_statement();
+        if self.matches(scanner::TokenType::Unset) {
+            return self.unset_statement();
+        }
+
+        if self.matches(scanner::TokenType::LeftBrace) {
+            return Ok(expr::Stmt::Block(self.block()?));
         }
 
         self.expression_statement()
