@@ -790,8 +790,7 @@ impl Parser {
         }
 
         if self.matches(scanner::TokenType::Include) {
-            // TODO: finish
-            // return self.include_statement();
+            return self.include_statement();
         }
         if self.matches(scanner::TokenType::Log) {
             return self.log_statement();
@@ -830,6 +829,19 @@ impl Parser {
             col: identifier.col,
             var_type: None,
         }))
+    }
+
+    fn include_statement(&mut self) -> Result<expr::Stmt, Error> {
+        let filename = self.consume(
+            scanner::TokenType::String,
+            "Expected string after include statement.",
+        )?.clone();
+        self.consume(
+            scanner::TokenType::Semicolon,
+            "Expected ; after call statement",
+        )?;
+
+        Ok(expr::Stmt::Include(expr::Literal::String(String::from_utf8(filename.lexeme).unwrap())))
     }
 
     fn add_statement(&mut self) -> Result<expr::Stmt, Error> {

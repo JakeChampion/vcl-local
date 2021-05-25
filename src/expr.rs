@@ -201,6 +201,7 @@ pub enum Stmt {
     Block(Vec<Stmt>),
     Return(SourceLocation, Option<Expr>),
     Call(Symbol),
+    Include(Literal),
 
     Log(Expr),
     Backend(Box<Backend>),
