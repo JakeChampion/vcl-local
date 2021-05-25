@@ -75,8 +75,8 @@ AST: [
 - [ ] typed tables
 - [x] subfield lookup using colon -- `set client.identity = req.http.cookie:user_id;`
 - [ ] subfield setting using colon -- `set req.http.Cache-Control:max-age = "3600";`
-- [ ] regex capture groups
-- [ ] PCRE2 modifiers
+- [ ] regex capture groups - https://developer.fastly.com/reference/vcl/regex/#capture-groups-and-replacement
+- [ ] PCRE2 modifiers - https://developer.fastly.com/reference/vcl/regex/#pattern-modifiers
 
 ### Interpreter
 
@@ -89,4 +89,5 @@ AST: [
 - [ ] call
 - [ ] state machine
 - [ ] stdlib
-- [ ] regex capture groups
+- [ ] regex capture groups - https://developer.fastly.com/reference/vcl/regex/#capture-groups-and-replacement
+- [ ] Predefined variables - https://developer.fastly.com/reference/vcl/variables/#predefined-variables
