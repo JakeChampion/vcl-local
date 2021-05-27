@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::convert::TryInto;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
@@ -14,81 +13,24 @@ trait Callable {
 }
 
 #[derive(Clone)]
-pub struct NativeFunction {
+pub struct Function {
     pub name: String,
     pub arity: u8,
     pub callable: fn(&mut Interpreter, &[Value]) -> Result<Value, String>,
 }
 
-impl fmt::Debug for NativeFunction {
+impl fmt::Debug for Function {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "NativeFunction({})", self.name)
+        write!(f, "Function({})", self.name)
     }
 }
 
-impl Callable for NativeFunction {
+impl Callable for Function {
     fn arity(&self, _interpreter: &Interpreter) -> u8 {
         self.arity
     }
     fn call(&self, interpreter: &mut Interpreter, args: &[Value]) -> Result<Value, String> {
         (self.callable)(interpreter, args)
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct LoxFunction {
-    pub id: u64,
-    pub name: expr::Symbol,
-    pub parameters: Vec<expr::Symbol>,
-    pub body: Vec<expr::Stmt>,
-}
-
-impl Callable for LoxFunction {
-    fn arity(&self, _interpreter: &Interpreter) -> u8 {
-        self.parameters.len().try_into().unwrap()
-    }
-    fn call(&self, interpreter: &mut Interpreter, args: &[Value]) -> Result<Value, String> {
-        let args_env: HashMap<_, _> = self
-            .parameters
-            .iter()
-            .zip(args.iter())
-            .map(|(param, arg)| {
-                (
-                    param.name.clone(),
-                    (
-                        Some(arg.clone()),
-                        SourceLocation {
-                            line: param.line,
-                            col: param.col,
-                        },
-                    ),
-                )
-            })
-            .collect();
-
-        let saved_env = interpreter.env.clone();
-        let saved_retval = interpreter.retval.clone();
-
-        let mut env = interpreter.env.clone();
-        env.venv.extend(saved_env.venv.clone());
-        env.venv.extend(args_env);
-        interpreter.env = env;
-        interpreter.backtrace.push((0, self.name.name.clone()));
-        interpreter.interpret(&self.body)?;
-
-        let retval = interpreter.retval.clone();
-        interpreter.backtrace.pop();
-        interpreter.retval = saved_retval;
-        interpreter.env = saved_env;
-
-        match retval {
-            Some(val) => {
-                Ok(val)
-            }
-            None => {
-                Ok(Value::Nil)
-            }
-        }
     }
 }
 
@@ -98,43 +40,29 @@ pub enum Value {
     Float(f64),
     String(String),
     Bool(bool),
-    NativeFunction(NativeFunction),
-    LoxFunction(
-        expr::Symbol,
-        /*id*/ u64,
-    ),
+    Function(Function),
     Nil,
 }
 
 fn as_callable(interpreter: &Interpreter, value: &Value) -> Option<Box<dyn Callable>> {
     match value {
-        Value::NativeFunction(f) => Some(Box::new(f.clone())),
-        Value::LoxFunction(_, id) => match interpreter.lox_functions.get(id) {
-            Some(f) => {
-                let f_copy = f.clone();
-                Some(Box::new(f_copy))
-            }
-            None => panic!(
-                "Internal interpreter error! Could not find loxFunction with id {}.",
-                id
-            ),
-        },
+        Value::Function(f) => Some(Box::new(f.clone())),
         _ => None,
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum Type {
+    Id,
+    Ip,
+    Time,
+    Rtime,
     Float,
     Integer,
     String,
     Bool,
     Nil,
-    NativeFunction,
-    LoxFunction,
-    LoxClass,
-    LoxInstance,
-    List,
+    Function
 }
 
 pub const fn type_of(val: &Value) -> Type {
@@ -143,8 +71,7 @@ pub const fn type_of(val: &Value) -> Type {
         Value::Integer(_) => Type::Integer,
         Value::String(_) => Type::String,
         Value::Bool(_) => Type::Bool,
-        Value::NativeFunction(_) => Type::NativeFunction,
-        Value::LoxFunction(_, _) => Type::LoxFunction,
+        Value::Function(_) => Type::Function,
         Value::Nil => {Type::Nil}
     }
 }
@@ -156,8 +83,7 @@ impl fmt::Display for Value {
             Value::Integer(n) => write!(f, "{}", n),
             Value::String(s) => write!(f, "'{}'", s),
             Value::Bool(b) => write!(f, "{}", b),
-            Value::NativeFunction(func) => write!(f, "NativeFunction({})", func.name),
-            Value::LoxFunction(sym, _) => write!(f, "LoxFunction({})", sym.name),
+            Value::Function(func) => write!(f, "Function({})", func.name),
             Value::Nil => write!(f, "nil"),
         }
     }
@@ -172,7 +98,7 @@ pub struct SourceLocation {
 #[derive(Debug, Default, Clone)]
 pub struct Environment {
     // SourceLocation is the location of a declaration
-    venv: HashMap<String, (Option<Value>, SourceLocation)>,
+    venv: HashMap<String, (Type, Option<Value>, SourceLocation)>,
 }
 
 pub enum LookupResult<'a> {
@@ -181,12 +107,28 @@ pub enum LookupResult<'a> {
     UndefAndNotDeclared,
 }
 
+fn expr_type_to_interpreter_type(expr_type: &expr::Type) -> Type {
+    match expr_type {
+        expr::Type::Id => {Type::Id}
+        expr::Type::Ip => {Type::Ip}
+        expr::Type::Rtime => {Type::Rtime}
+        expr::Type::Time => {Type::Time}
+        expr::Type::Float => Type::Float,
+        expr::Type::Integer => Type::Integer,
+        expr::Type::String => Type::String,
+        expr::Type::Bool => Type::Bool,
+        // expr::Type::Function(_) => Type::Function,
+        _ => {panic!(format!("Can not convert parser type {:?} to an interpreter type", expr_type))}
+    }
+}
+
 impl Environment {
-    pub fn define(&mut self, sym: expr::Symbol, maybe_val: Option<Value>) {
+    pub fn define(&mut self, sym: expr::Symbol, var_type: Type, val: Option<Value>) {
         self.venv.insert(
             sym.name,
             (
-                maybe_val,
+                var_type,
+                val,
                 SourceLocation {
                     line: sym.line,
                     col: sym.col,
@@ -197,7 +139,7 @@ impl Environment {
 
     pub fn lookup(&self, sym: &expr::Symbol) -> LookupResult<'_> {
         match self.venv.get(&sym.name) {
-            Some((maybe_val, defn_source_location)) => match maybe_val {
+            Some((var_type, maybe_val, defn_source_location)) => match maybe_val {
                 Some(val) => LookupResult::Ok(val),
                 None => LookupResult::UndefButDeclared(SourceLocation {
                     line: defn_source_location.line,
@@ -235,9 +177,15 @@ impl Environment {
 
     pub fn assign(&mut self, sym: expr::Expr, val: &Value) -> Result<(), String> {
         let sym = self.get_sym(sym)?;
-        if self.venv.contains_key(&sym.name) {
-            self.define(sym, Some(val.clone()));
-            return Ok(());
+        if let Some(entry) = self.venv.clone().get(&sym.name) {
+            if entry.0 == type_of(val) {
+                self.define(sym, entry.0, Some(val.clone()));
+                return Ok(());
+            }
+            return Err(format!(
+                "attempting to assign to variable of type {:?} with a vale of type {:?} at line={},col={}",
+                entry.0, type_of(val), sym.line, sym.col
+            ));
         }
 
         Err(format!(
@@ -249,7 +197,6 @@ impl Environment {
 
 pub struct Interpreter {
     pub counter: u64,
-    pub lox_functions: HashMap<u64, LoxFunction>,
     pub env: Environment,
     pub globals: Environment,
     pub retval: Option<Value>,
@@ -267,7 +214,6 @@ impl Default for Interpreter {
 
         Self {
             counter: 0,
-            lox_functions: HashMap::default(),
             env: Environment::default(),
             globals,
             retval: None,
@@ -332,7 +278,7 @@ impl Interpreter {
             },
             expr::Stmt::VarDecl(sym) => {
                 // println!("vardecl: {:?}", sym);
-                self.env.define(sym.clone(), None);
+                self.env.define(sym.clone(), expr_type_to_interpreter_type(sym.var_type.as_ref().unwrap()), None);
                 Ok(())
             }
             expr::Stmt::Block(stmts) => {
