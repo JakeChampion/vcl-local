@@ -1,3 +1,4 @@
+use std::num::Wrapping;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -36,7 +37,7 @@ impl Callable for Function {
 
 #[derive(Debug, Clone)]
 pub enum Value {
-    Integer(i64),
+    Integer(Wrapping<i64>),
     Float(f64),
     String(String),
     Bool(bool),
@@ -419,8 +420,10 @@ impl Interpreter {
         };
 
         let v = match (sym_val, int) {
-            (Value::Integer(a), expr::Literal::Integer(b)) => Value::Integer(a + b),
+            (Value::Integer(a), expr::Literal::Integer(b)) => Value::Integer(a + Wrapping(*b)),
             (Value::Float(a), expr::Literal::Float(b)) => Value::Float(a + b),
+            (Value::Float(a), expr::Literal::Integer(b)) => Value::Float(a + *b as f64),
+            (Value::Integer(a), expr::Literal::Float(b)) => Value::Integer(a + Wrapping(*b as i64)),
             _ => {
                 panic!("no please don't make me += things of different types")
             }
@@ -441,7 +444,7 @@ impl Interpreter {
         let int = match val_expr {
             expr::Expr::Literal(a) => match a {
                 expr::Literal::Float(a) => Value::Float(*a),
-                expr::Literal::Integer(a) => Value::Integer(*a),
+                expr::Literal::Integer(a) => Value::Integer(Wrapping(*a)),
                 _ => {
                     panic!("no please don't make me -= things of different types")
                 }
@@ -480,7 +483,7 @@ impl Interpreter {
         };
 
         let v = match (sym_val, int) {
-            (Value::Integer(a), expr::Literal::Integer(b)) => Value::Integer(a * b),
+            (Value::Integer(a), expr::Literal::Integer(b)) => Value::Integer(a * Wrapping(*b)),
             (Value::Float(a), expr::Literal::Float(b)) => Value::Float(a * b),
             _ => {
                 panic!("no please don't make me *= things of different types")
@@ -507,7 +510,7 @@ impl Interpreter {
         };
 
         let v = match (sym_val, int) {
-            (Value::Integer(a), expr::Literal::Integer(b)) => Value::Integer(a / b),
+            (Value::Integer(a), expr::Literal::Integer(b)) => Value::Integer(a / Wrapping(*b)),
             (Value::Float(a), expr::Literal::Float(b)) => Value::Float(a / b),
             _ => {
                 panic!("no please don't make me /= things of different types")
@@ -534,8 +537,8 @@ impl Interpreter {
         };
 
         let v = match (sym_val, int) {
-            (Value::Integer(a), expr::Literal::Integer(b)) => Value::Integer((a).rem_euclid(*b)),
-            (Value::Float(a), expr::Literal::Float(b)) => Value::Float((a).rem_euclid(*b)),
+            (Value::Integer(a), expr::Literal::Integer(b)) => Value::Integer(Wrapping((a.0).rem_euclid(*b))),
+            (Value::Float(a), expr::Literal::Float(b)) => Value::Float(a.rem_euclid(*b)),
             _ => {
                 panic!("no please don't make me %= things of different types")
             }
@@ -561,7 +564,7 @@ impl Interpreter {
         };
 
         let v = match (sym_val, int) {
-            (Value::Integer(a), expr::Literal::Integer(b)) => Value::Integer(a | b),
+            (Value::Integer(a), expr::Literal::Integer(b)) => Value::Integer(a | Wrapping(*b)),
             (Value::Float(_), expr::Literal::Float(_)) => {
                 panic!("Assignment operator |= not possible for type FLOAT");
             }
@@ -590,7 +593,7 @@ impl Interpreter {
         };
 
         let v = match (sym_val, int) {
-            (Value::Integer(a), expr::Literal::Integer(b)) => Value::Integer(a & b),
+            (Value::Integer(a), expr::Literal::Integer(b)) => Value::Integer(a & Wrapping(*b)),
             (Value::Float(_), expr::Literal::Float(_)) => {
                 panic!("Assignment operator &= not possible for type FLOAT");
             }
@@ -619,7 +622,7 @@ impl Interpreter {
         };
 
         let v = match (sym_val, int) {
-            (Value::Integer(a), expr::Literal::Integer(b)) => Value::Integer(a ^ b),
+            (Value::Integer(a), expr::Literal::Integer(b)) => Value::Integer(a ^ Wrapping(*b)),
             (Value::Float(_), expr::Literal::Float(_)) => {
                 panic!("Assignment operator ^= not possible for type FLOAT");
             }
@@ -648,7 +651,7 @@ impl Interpreter {
         };
 
         let v = match (sym_val, int) {
-            (Value::Integer(a), expr::Literal::Integer(b)) => Value::Integer(a << b),
+            (Value::Integer(a), expr::Literal::Integer(b)) => Value::Integer(a << *b as usize),
             (Value::Float(_), expr::Literal::Float(_)) => {
                 panic!("Assignment operator <<= not possible for type FLOAT");
             }
@@ -677,7 +680,7 @@ impl Interpreter {
         };
 
         let v = match (sym_val, int) {
-            (Value::Integer(a), expr::Literal::Integer(b)) => Value::Integer(a >> b),
+            (Value::Integer(a), expr::Literal::Integer(b)) => Value::Integer(a >> *b as usize),
             (Value::Float(_), expr::Literal::Float(_)) => {
                 panic!("Assignment operator >>= not possible for type FLOAT");
             }
@@ -941,12 +944,11 @@ impl Interpreter {
 
     fn interpret_literal(lit: &expr::Literal) -> Value {
         match lit {
-            // expr::Literal::Number(n) => Value::Number(*n),
             expr::Literal::String(s) => Value::String(s.clone()),
             expr::Literal::True => Value::Bool(true),
             expr::Literal::False => Value::Bool(false),
             expr::Literal::Float(n) => Value::Float(*n),
-            expr::Literal::Integer(n) => Value::Integer(*n),
+            expr::Literal::Integer(n) => Value::Integer(Wrapping(*n)),
             expr::Literal::Duration(_, _)
             | expr::Literal::AclEntry(_, _)
             | expr::Literal::Percent(_) => {
