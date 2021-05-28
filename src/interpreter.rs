@@ -107,7 +107,15 @@ pub enum LookupResult<'a> {
     UndefButDeclared(SourceLocation),
     UndefAndNotDeclared,
 }
-
+fn int_to_float (b:i64) -> f64 {
+    let bf: Option<f64> = num_traits::cast::FromPrimitive::from_i64(b);
+    if let Some(bf) = bf {
+        if bf as i64 == b {
+            return bf;
+        }
+    }
+    panic!("Integer {} is not exactly representable as a floating-point number", b);
+}
 fn expr_type_to_interpreter_type(expr_type: &expr::Type) -> Type {
     match expr_type {
         expr::Type::Id => Type::Id,
@@ -192,20 +200,8 @@ impl Environment {
             }
             if let Value::Integer(b) = val {
                 if entry.0 == Type::Float {
-                    let bf: Option<f64> = num_traits::cast::FromPrimitive::from_i64(b.0);
-                    match bf {
-                        Some(bf) => {
-                            if bf as i64 == b.0 {
-                                self.define(sym, entry.0, Some(Value::Float(bf)));
-                                return Ok(());
-                            } else {
-                                panic!("Integer {} is not exactly representable as a floating-point number", b.0);
-                            }
-                        }
-                        None => {
-                            panic!("Integer {} is not exactly representable as a floating-point number", b.0);
-                        }
-                    }
+                    self.define(sym, entry.0, Some(Value::Float(int_to_float(b.0))));
+                    return Ok(());
                 }
             }
             return Err(format!(
@@ -440,15 +436,7 @@ impl Interpreter {
         let v = match (sym_val, int) {
             (Value::Integer(a), expr::Literal::Integer(b)) => Value::Integer(a + Wrapping(*b)),
             (Value::Float(a), expr::Literal::Float(b)) => Value::Float(a + b),
-            (Value::Float(a), expr::Literal::Integer(b)) => {
-                let bf: Option<f64> = num_traits::cast::FromPrimitive::from_i64(*b);
-                if let Some(b) = bf {
-                    Value::Float(a + b)
-                } else {
-                    panic!("Integer {} is not exactly representable as a floating-point number", b);
-                }
-            },
-            (Value::Integer(a), expr::Literal::Float(b)) => Value::Integer(a + Wrapping(*b as i64)),
+            (Value::Float(a), expr::Literal::Integer(b)) => Value::Float(a + int_to_float(*b)),
             _ => {
                 panic!("no please don't make me += things of different types")
             }
@@ -676,7 +664,7 @@ impl Interpreter {
         };
 
         let v = match (sym_val, int) {
-            (Value::Integer(a), expr::Literal::Integer(b)) => Value::Integer(a << *b as usize),
+            (Value::Integer(a), expr::Literal::Integer(b)) => Value::Integer(a << *b as usize), //TODO: make this work with an i64
             (Value::Float(_), expr::Literal::Float(_)) => {
                 panic!("Assignment operator <<= not possible for type FLOAT");
             }
@@ -705,7 +693,7 @@ impl Interpreter {
         };
 
         let v = match (sym_val, int) {
-            (Value::Integer(a), expr::Literal::Integer(b)) => Value::Integer(a >> *b as usize),
+            (Value::Integer(a), expr::Literal::Integer(b)) => Value::Integer(a >> *b as usize), //TODO: make this work with an i64
             (Value::Float(_), expr::Literal::Float(_)) => {
                 panic!("Assignment operator >>= not possible for type FLOAT");
             }
@@ -735,7 +723,7 @@ impl Interpreter {
 
         let v = match (sym_val, int) {
             (Value::Integer(a), expr::Literal::Integer(b)) => {
-                Value::Integer(a.rotate_left(*b as u32))
+                Value::Integer(a.rotate_left(*b as u32)) //TODO: make this work with an i64
             }
             (Value::Float(_), expr::Literal::Float(_)) => {
                 panic!("Assignment operator rol= not possible for type FLOAT");
@@ -766,7 +754,7 @@ impl Interpreter {
 
         let v = match (sym_val, int) {
             (Value::Integer(a), expr::Literal::Integer(b)) => {
-                Value::Integer(a.rotate_right(*b as u32))
+                Value::Integer(a.rotate_right(*b as u32)) //TODO: make this work with an i64
             }
             (Value::Float(_), expr::Literal::Float(_)) => {
                 panic!("Assignment operator ror= not possible for type FLOAT");
