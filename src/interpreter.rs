@@ -190,6 +190,24 @@ impl Environment {
                 self.define(sym, entry.0, Some(val.clone()));
                 return Ok(());
             }
+            if let Value::Integer(b) = val {
+                if entry.0 == Type::Float {
+                    let bf: Option<f64> = num_traits::cast::FromPrimitive::from_i64(b.0);
+                    match bf {
+                        Some(bf) => {
+                            if bf as i64 == b.0 {
+                                self.define(sym, entry.0, Some(Value::Float(bf)));
+                                return Ok(());
+                            } else {
+                                panic!("Integer {} is not exactly representable as a floating-point number", b.0);
+                            }
+                        }
+                        None => {
+                            panic!("Integer {} is not exactly representable as a floating-point number", b.0);
+                        }
+                    }
+                }
+            }
             return Err(format!(
                 "attempting to assign to variable of type {:?} with a vale of type {:?} at line={},col={}",
                 entry.0, type_of(val), sym.line, sym.col
@@ -422,7 +440,14 @@ impl Interpreter {
         let v = match (sym_val, int) {
             (Value::Integer(a), expr::Literal::Integer(b)) => Value::Integer(a + Wrapping(*b)),
             (Value::Float(a), expr::Literal::Float(b)) => Value::Float(a + b),
-            (Value::Float(a), expr::Literal::Integer(b)) => Value::Float(a + *b as f64),
+            (Value::Float(a), expr::Literal::Integer(b)) => {
+                let bf: Option<f64> = num_traits::cast::FromPrimitive::from_i64(*b);
+                if let Some(b) = bf {
+                    Value::Float(a + b)
+                } else {
+                    panic!("Integer {} is not exactly representable as a floating-point number", b);
+                }
+            },
             (Value::Integer(a), expr::Literal::Float(b)) => Value::Integer(a + Wrapping(*b as i64)),
             _ => {
                 panic!("no please don't make me += things of different types")
