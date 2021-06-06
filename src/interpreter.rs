@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
-use crate::expr::{self, Symbol};
+use crate::expr::{self, Program, Symbol};
 use std::fmt;
 
 static INIT: &str = "init";
@@ -245,11 +245,19 @@ impl Default for Interpreter {
 }
 
 impl Interpreter {
-    pub fn interpret(&mut self, stmts: &[expr::Stmt]) -> Result<(), String> {
+    pub fn interpret(&mut self, program: &Program) -> Result<(), String> {
         self.interrupted.store(false, Ordering::Release);
-        for stmt in stmts {
-            // println!("stmt: {:?}", stmt);
-            self.execute(stmt)?
+        for stmt in &program.body {
+            println!("stmt: {:?}", stmt);
+            // 1. setup backends + healthchecks
+            // 2. setup directors
+            // 3. setup acls
+            // 4. setup imports
+            // 
+            // 5. setup tables
+            // 6. setup subroutine state machine
+            // 
+            // self.execute(stmt)?
         }
         Ok(())
     }
@@ -320,11 +328,6 @@ impl Interpreter {
             | expr::Stmt::Esi
             | expr::Stmt::Include(_)
             | expr::Stmt::Call(_)
-            | expr::Stmt::SubDecl(_)
-            | expr::Stmt::Backend(_)
-            | expr::Stmt::Director(_)
-            | expr::Stmt::Table(_)
-            | expr::Stmt::Acl(_)
             | expr::Stmt::Restart(_)
             | expr::Stmt::Error(_)
             | expr::Stmt::Add(_, _)

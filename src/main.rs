@@ -68,19 +68,19 @@ fn main() {
                     let stmts_maybe = parser::parse(tokens);
 
                     match stmts_maybe {
-                        Ok(stmts) => {
+                        Ok(program) => {
                             if matches.is_present(SYNTAX_CHECK) {
                                 println!("successfully parsed");
                                 std::process::exit(0);
                             }
                             if matches.is_present(SHOW_AST_STR) {
-                                println!("AST: {:#?}", stmts);
+                                println!("AST: {:#?}", program);
                                 std::process::exit(0);
                             }
 
                             let mut interpreter: interpreter::Interpreter =
                                 interpreter::Interpreter::default();
-                            let interpret_result = interpreter.interpret(&stmts);
+                            let interpret_result = interpreter.interpret(&program);
 
                             match interpret_result {
                                 Ok(_) => {

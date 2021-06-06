@@ -29,11 +29,16 @@ Which gives output
 
 ``` bash
 tokens: [
-    Token { ty: Log, lexeme: "log", literal: None, line: 1, col: 2},
-    Token { ty: String, lexeme: ""hello world"", literal: Some(Str("hello world")), line: 1, col: 16},
-    Token { ty: Semicolon, lexeme: ";", literal: None, line: 1, col: 17},
-    Token { ty: Eof, lexeme: "", literal: None, line: 1, col: 17},
+    Token { ty: Sub, lexeme: "sub", literal: None, line: 1, col: 2},
+    Token { ty: Identifier, lexeme: "vcl_recv", literal: Some(Identifier("vcl_recv")), line: 1, col: 11},
+    Token { ty: LeftBrace, lexeme: "{", literal: None, line: 1, col: 13},
+    Token { ty: Log, lexeme: "log", literal: None, line: 2, col: 7},
+    Token { ty: String, lexeme: ""hello world"", literal: Some(Str("hello world")), line: 2, col: 21},
+    Token { ty: Semicolon, lexeme: ";", literal: None, line: 2, col: 22},
+    Token { ty: RightBrace, lexeme: "}", literal: None, line: 3, col: 1},
+    Token { ty: Eof, lexeme: "", literal: None, line: 3, col: 1},
 ]
+
 ```
 
 We can show the AST with
@@ -45,15 +50,29 @@ cargo run --release --quiet -- hello.vcl --show-ast
 Which gives
 
 ``` bash
-AST: [
-    Log(
-        Literal(
-            String(
-                "hello world",
-            ),
+AST: Program {
+    body: [
+        SubDecl(
+            SubDecl {
+                name: Symbol {
+                    name: "vcl_recv",
+                    line: 1,
+                    col: 11,
+                    var_type: None,
+                },
+                body: [
+                    Log(
+                        Literal(
+                            String(
+                                "hello world",
+                            ),
+                        ),
+                    ),
+                ],
+            },
         ),
-    ),
-]
+    ],
+}
 ```
 
 ## TODO
@@ -61,13 +80,15 @@ AST: [
 ### Scanner
 
 - [ ] Add comments to the scan result
+- [ ] import
 
 ### Parser
 
+- [ ] import
 - [ ] Pragmas
 - [ ] Macros
 - [ ] ACL
-- [x] Includes
+- [ ] Includes
 - [x] string concat without requiring `+` sign. e.g. - `set req.http.a = "url:"req.url;`
 - [ ] heredoc syntax for long strings
 - [ ] short strings need percent decoding
@@ -75,8 +96,9 @@ AST: [
 - [ ] typed tables
 - [x] subfield lookup using colon -- `set client.identity = req.http.cookie:user_id;`
 - [ ] subfield setting using colon -- `set req.http.Cache-Control:max-age = "3600";`
-- [ ] regex capture groups - https://developer.fastly.com/reference/vcl/regex/#capture-groups-and-replacement
-- [ ] PCRE2 modifiers - https://developer.fastly.com/reference/vcl/regex/#pattern-modifiers
+- [ ] regex capture groups - <https://developer.fastly.com/reference/vcl/regex/#capture-groups-and-replacement>
+- [ ] PCRE2 modifiers - <https://developer.fastly.com/reference/vcl/regex/#pattern-modifiers>
+- [ ] error if at end of parsing and at root level there were things other than subroutines, tables and acls
 
 ### Interpreter
 
@@ -89,5 +111,5 @@ AST: [
 - [ ] call
 - [ ] state machine
 - [ ] stdlib
-- [ ] regex capture groups - https://developer.fastly.com/reference/vcl/regex/#capture-groups-and-replacement
-- [ ] Predefined variables - https://developer.fastly.com/reference/vcl/variables/#predefined-variables
+- [ ] regex capture groups - <https://developer.fastly.com/reference/vcl/regex/#capture-groups-and-replacement>
+- [ ] Predefined variables - <https://developer.fastly.com/reference/vcl/variables/#predefined-variables>

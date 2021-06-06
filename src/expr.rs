@@ -193,10 +193,23 @@ pub struct Error {
 }
 
 #[derive(Debug, Clone)]
+pub struct Program {
+    pub body: Vec<ABDIST>,
+}
+
+#[derive(Debug, Clone)]
+pub enum ABDIST {
+    Acl(Acl),
+    Backend(Box<Backend>),
+    Director(Box<Director>),
+    SubDecl(SubDecl),
+    Table(Table),
+}
+
+#[derive(Debug, Clone)]
 pub enum Stmt {
     Esi,
     Expr(Expr),
-    SubDecl(SubDecl),
     If(Expr, Box<Stmt>, Option<Box<Stmt>>),
     VarDecl(Symbol),
     Block(Vec<Stmt>),
@@ -205,10 +218,6 @@ pub enum Stmt {
     Include(Literal),
 
     Log(Expr),
-    Backend(Box<Backend>),
-    Director(Box<Director>),
-    Table(Table),
-    Acl(Acl),
     Restart(SourceLocation),
     Error(Error),
 
@@ -219,19 +228,19 @@ pub enum Stmt {
     SyntheticBase64(Expr),
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub enum UnaryOpTy {
     Bang,
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct UnaryOp {
     pub ty: UnaryOpTy,
     pub line: usize,
     pub col: i64,
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub enum BinaryOpTy {
     EqualEqual,
     NotEqual,
@@ -244,7 +253,7 @@ pub enum BinaryOpTy {
     NotMatch,
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct BinaryOp {
     pub ty: BinaryOpTy,
     pub line: usize,

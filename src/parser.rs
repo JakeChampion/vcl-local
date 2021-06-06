@@ -1,4 +1,4 @@
-use crate::expr;
+use crate::expr::{self, Program};
 use crate::scanner;
 
 use std::fmt;
@@ -7,7 +7,7 @@ struct Parser {
     tokens: Vec<scanner::Token>,
     current: usize,
     in_subdec: bool,
-    statements: Vec<expr::Stmt>,
+    statements: Vec<expr::ABDIST>,
 }
 
 impl Default for Parser {
@@ -166,7 +166,7 @@ pub enum SubKind {
     Function,
 }
 
-pub fn parse(tokens: Vec<scanner::Token>) -> Result<Vec<expr::Stmt>, Error> {
+pub fn parse(tokens: Vec<scanner::Token>) -> Result<Program, Error> {
     let mut p = Parser {
         tokens,
         ..Parser::default()
@@ -176,7 +176,9 @@ pub fn parse(tokens: Vec<scanner::Token>) -> Result<Vec<expr::Stmt>, Error> {
     match stmts_or_err {
         Ok(stmts_or_err) => {
             if p.is_at_end() {
-                Ok(stmts_or_err)
+                Ok(Program {
+                    body: stmts_or_err
+                })
             } else {
                 let tok = &p.tokens[p.current];
                 Err(Error::UnexpectedToken(tok.clone()))
@@ -187,7 +189,7 @@ pub fn parse(tokens: Vec<scanner::Token>) -> Result<Vec<expr::Stmt>, Error> {
 }
 
 impl Parser {
-    pub fn parse(&mut self) -> Result<Vec<expr::Stmt>, Error> {
+    pub fn parse(&mut self) -> Result<Vec<expr::ABDIST>, Error> {
         // let mut statements: Vec<expr::Stmt> = Vec::new();
 
         while !self.is_at_end() {
@@ -198,9 +200,9 @@ impl Parser {
         Ok(self.statements.clone())
     }
 
-    fn declaration(&mut self) -> Result<expr::Stmt, Error> {
+    fn declaration(&mut self) -> Result<expr::ABDIST, Error> {
         if self.matches(scanner::TokenType::Sub) {
-            return Ok(expr::Stmt::SubDecl(self.sub_decl(&SubKind::Function)?));
+            return Ok(expr::ABDIST::SubDecl(self.sub_decl(&SubKind::Function)?));
         }
 
         if self.matches(scanner::TokenType::Acl) {
@@ -209,18 +211,19 @@ impl Parser {
         }
 
         if self.matches(scanner::TokenType::Backend) {
-            return Ok(expr::Stmt::Backend(Box::new(self.backend_decl()?)));
+            return Ok(expr::ABDIST::Backend(Box::new(self.backend_decl()?)));
         }
 
         if self.matches(scanner::TokenType::Director) {
-            return Ok(expr::Stmt::Director(Box::new(self.director_decl()?)));
+            return Ok(expr::ABDIST::Director(Box::new(self.director_decl()?)));
         }
         
         if self.matches(scanner::TokenType::Table) {
-            return Ok(expr::Stmt::Table(self.table_decl()?));
+            return Ok(expr::ABDIST::Table(self.table_decl()?));
         }
 
-        self.statement()
+        // self.statement()
+        panic!("No, you need to be in a declaration. Found: {:?}", self.peek().ty)
     }
 
     fn declare_statement(&mut self) -> Result<expr::Stmt, Error> {
@@ -1131,7 +1134,7 @@ impl Parser {
         let mut stmts = Vec::new();
 
         while !self.check(scanner::TokenType::RightBrace) && !self.is_at_end() {
-            stmts.push(self.declaration()?)
+            stmts.push(self.statement()?)
         }
 
         self.consume(scanner::TokenType::RightBrace, "Expected } after block.")?;
@@ -1472,7 +1475,14 @@ impl Parser {
     fn colon(&mut self) -> Result<expr::Expr, Error> {
         let prev = self.statements.pop().unwrap();
         let prev = match prev {
-            expr::Stmt::Expr(e) => e,
+            expr::ABDIST::SubDecl(sub) => {
+                match sub.body.last().unwrap() {
+                    expr::Stmt::Expr(e) => e.clone(),
+                    _ => {
+                        panic!("internal error in parser: can only use subfield accessor on expressions")
+                    }
+                }
+            }
             _ => {
                 panic!("internal error in parser: can only use subfield accessor on expressions")
             }

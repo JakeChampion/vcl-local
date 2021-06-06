@@ -1,1 +1,3 @@
-log "hello world";
+sub vcl_recv {
+    log "hello world";
+}
