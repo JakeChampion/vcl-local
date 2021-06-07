@@ -1,7 +1,9 @@
-use crate::{expr::{self, Program}, parse_probe::parse_probe};
+use http_types::Method;
+
+use crate::{expr::{self, Probe, Program, Scheme}, parse_probe::parse_probe, scanner::Literal};
 use crate::scanner;
 
-use std::fmt;
+use std::{fmt, str::FromStr};
 
 struct Parser {
     tokens: Vec<scanner::Token>,
@@ -594,9 +596,34 @@ impl Parser {
 
     fn probe(&mut self) -> Result<expr::Probe, Error> {
         let token = self.consume(scanner::TokenType::String, "15678905")?;
-        let probe_str = String::from_utf8(token.lexeme.clone()).unwrap();
-        let (_, probe) = parse_probe(&probe_str).expect("1234567");
-        Ok(probe)
+        if let Literal::Str(probe_str) = token.literal.clone().unwrap() {
+            println!("abc: {:?}", probe_str);
+            let mut a = probe_str.split_whitespace();
+            let method = a.next().unwrap();
+            let method = Method::from_str(method).unwrap();
+            let path = a.next().unwrap();
+            let scheme:Scheme = a.next().unwrap().into();
+            let mut headers = vec![];
+            while !self.check(scanner::TokenType::Semicolon) && !self.is_at_end() {
+                let header_token = self.consume(scanner::TokenType::String, "1563378905")?;
+                if let Literal::Str(header_str) = header_token.literal.clone().unwrap() {
+                    let mut a = header_str.split(':');
+                    let name = a.next().unwrap().to_string();
+                    let value = a.next().unwrap().trim_start().to_string();
+                    headers.push((name, value));
+                } else {
+                    panic!("sf0s");
+                }
+            }
+            Ok(Probe {
+                method,
+                path: path.to_string(),
+                scheme,
+                headers
+            })
+        } else {
+            panic!("123lk312");
+        }
     }
 
     fn healthcheck(&mut self) -> Result<expr::Healthcheck, Error> {
