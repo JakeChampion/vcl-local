@@ -1,4 +1,4 @@
-use crate::expr::{self, Program};
+use crate::{expr::{self, Program}, parse_probe::parse_probe};
 use crate::scanner;
 
 use std::fmt;
@@ -518,7 +518,7 @@ impl Parser {
                     scanner::TokenType::LeftBrace,
                     "Expected { before probe block",
                 )?;
-                let value = self.probe()?;
+                let value = self.healthcheck()?;
                 self.consume(
                     scanner::TokenType::RightBrace,
                     "Expected } after probe block",
@@ -593,8 +593,15 @@ impl Parser {
     }
 
     fn probe(&mut self) -> Result<expr::Probe, Error> {
+        let token = self.consume(scanner::TokenType::String, "15678905")?;
+        let probe_str = String::from_utf8(token.lexeme.clone()).unwrap();
+        let (_, probe) = parse_probe(&probe_str).expect("1234567");
+        Ok(probe)
+    }
+
+    fn healthcheck(&mut self) -> Result<expr::Healthcheck, Error> {
         let mut fields = Vec::new();
-        let mut builder = expr::ProbeBuilder::default();
+        let mut builder = expr::HealthcheckBuilder::default();
 
         while !self.check(scanner::TokenType::RightBrace) && !self.is_at_end() {
             self.consume(scanner::TokenType::Dot, "Expected . before probe property")?;
@@ -621,7 +628,7 @@ impl Parser {
                     builder.dummy(self.primary()?);
                 }
                 "request" => {
-                    builder.request(self.expression()?);
+                    builder.request(self.probe()?);
                 }
                 "expected_response" => {
                     builder.expected_response(self.primary()?);
@@ -910,6 +917,7 @@ impl Parser {
 
     fn set_statement(&mut self) -> Result<expr::Stmt, Error> {
         let mut identifier = self.primary()?;
+        
         loop {
             if self.matches(scanner::TokenType::Dot) {
                 let name_token = self.peek().clone();
@@ -1368,11 +1376,36 @@ impl Parser {
     }
 
     fn identifier(&mut self) -> Result<expr::Expr, Error> {
+        // TODO: handle context-specific identifiers such as `always` in a backend definition
+        // TODO: handle custom identifiers such as backend names, subroutine names, table names, acl names, function names.
         let token = self.previous().clone();
         let v = String::from_utf8(token.lexeme.clone()).unwrap();
         let name_token;
         match v.as_str() {
-            "req" | "bereq" | "obj" | "resp" | "beresp" => {
+            "var" => {
+                self.consume(scanner::TokenType::Dot, "Expected . after var prefix")?;
+                name_token = self
+                    .consume(scanner::TokenType::Identifier, "Expected variable name")?
+                    .clone();
+                    match &name_token.literal {
+                        Some(scanner::Literal::Identifier(s)) => {
+                            return Ok(expr::Expr::Variable(expr::Symbol {
+                                name: s.clone(),
+                                line: self.previous().line,
+                                col: self.previous().col,
+                                var_type: None,
+                            }))
+                        }
+                        Some(l) => panic!(
+                            "internal error in parser: when parsing identifier, found literal {:?}",
+                            l
+                        ),
+                        None => {
+                            panic!("internal error in parser: when parsing identifier, found no literal")
+                        }
+                    }
+            }
+            _ => {
                 let mut identifier = expr::Expr::Variable(expr::Symbol {
                     name: v.clone(),
                     line: self.previous().line,
@@ -1409,39 +1442,6 @@ impl Parser {
                         return Ok(identifier);
                     }
                 }
-            }
-            "var" => {
-                self.consume(scanner::TokenType::Dot, "Expected . after var prefix")?;
-                name_token = self
-                    .consume(scanner::TokenType::Identifier, "Expected variable name")?
-                    .clone();
-                    match &name_token.literal {
-                        Some(scanner::Literal::Identifier(s)) => {
-                            return Ok(expr::Expr::Variable(expr::Symbol {
-                                name: s.clone(),
-                                line: self.previous().line,
-                                col: self.previous().col,
-                                var_type: None,
-                            }))
-                        }
-                        Some(l) => panic!(
-                            "internal error in parser: when parsing identifier, found literal {:?}",
-                            l
-                        ),
-                        None => {
-                            panic!("internal error in parser: when parsing identifier, found no literal")
-                        }
-                    }
-            }
-            _ => {
-                return Err(Error::TokenMismatch {
-                    expected: scanner::TokenType::Identifier,
-                    found: token,
-                    maybe_on_err_string: Some(format!(
-                        "Found {} - Expected one of var req bereq obj resp beresp",
-                        v
-                    )),
-                });
             }
         }
     }

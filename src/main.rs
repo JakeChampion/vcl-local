@@ -17,6 +17,7 @@ mod expr;
 mod parser;
 mod scanner;
 mod interpreter;
+mod parse_probe;
 
 static INPUT_STR: &str = "INPUT";
 static SHOW_TOKENS_STR: &str = "show tokens";

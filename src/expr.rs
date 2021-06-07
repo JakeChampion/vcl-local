@@ -1,3 +1,5 @@
+use http_types::{Method};
+
 use derive_builder::Builder;
 #[derive(Debug, Clone)]
 pub enum Assignment {
@@ -102,15 +104,15 @@ pub struct BackendBody {
 
     // healthcheck
     #[builder(setter(strip_option), default)]
-    pub probe: Option<Probe>,
+    pub probe: Option<Healthcheck>,
 }
 
 #[derive(Default, Debug, Clone, Builder)]
-pub struct Probe {
+pub struct Healthcheck {
     #[builder(setter(strip_option), default)]
     pub dummy: Option<Expr>,
     #[builder(setter(strip_option), default)]
-    pub request: Option<Expr>,
+    pub request: Option<Probe>,
     #[builder(setter(strip_option), default)]
     pub expected_response: Option<Expr>,
     #[builder(setter(strip_option), default)]
@@ -123,6 +125,30 @@ pub struct Probe {
     pub initial: Option<Expr>,
     #[builder(setter(strip_option), default)]
     pub threshold: Option<Expr>,
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Hash)]
+pub struct Probe {
+    pub(crate) method: Method,
+    pub(crate) scheme: Scheme,
+    pub(crate) path: String,
+    pub(crate) headers: Vec<(String, String)>,
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
+pub enum Scheme {
+    Http11,
+    Https12,
+}
+
+impl From<&str> for Scheme {
+    fn from(i: &str) -> Self {
+        match i.to_lowercase().as_str() {
+            "http/1.1" => Scheme::Http11,
+            "http/1.2" => Scheme::Https12,
+            other => unimplemented!("no other schemes supported - given: {}", other),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]

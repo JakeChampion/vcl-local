@@ -9,7 +9,7 @@ backend test {
   .port = "443";
   .ssl = true;
   .ssl_cert_hostname = "storage.googleapis.com";
-  .ssl_check_cert = always;
+  .ssl_check_cert = "always";
   .ssl_sni_hostname = "storage.googleapis.com";
 
   # Timeouts and limits

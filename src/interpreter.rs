@@ -248,7 +248,7 @@ impl Interpreter {
     pub fn interpret(&mut self, program: &Program) -> Result<(), String> {
         self.interrupted.store(false, Ordering::Release);
         for stmt in &program.body {
-            println!("stmt: {:?}", stmt);
+            // println!("stmt: {:?}", stmt);
             // 1. setup backends + healthchecks
             // 2. setup directors
             // 3. setup acls
@@ -870,7 +870,8 @@ impl Interpreter {
 
                 match maybe_args {
                     Ok(args) => {
-                        if args.len() == callable.arity(self).into() {
+                        let arity: usize = callable.arity(self).into();
+                        if args.len() == arity {
                             callable.call(self, &args)
                         } else {
                             Err(format!(
