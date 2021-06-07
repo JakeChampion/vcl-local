@@ -1,6 +1,6 @@
 use http_types::Method;
 
-use crate::{expr::{self, Probe, Program, Scheme}, parse_probe::parse_probe, scanner::Literal};
+use crate::{expr::{self, Probe, Program, Scheme}, scanner::Literal};
 use crate::scanner;
 
 use std::{fmt, str::FromStr};

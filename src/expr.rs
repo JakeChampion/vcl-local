@@ -144,8 +144,8 @@ pub enum Scheme {
 impl From<&str> for Scheme {
     fn from(i: &str) -> Self {
         match i.to_lowercase().as_str() {
-            "http/1.1" => Scheme::Http11,
-            "http/1.2" => Scheme::Https12,
+            "http/1.1" => Self::Http11,
+            "http/1.2" => Self::Https12,
             other => unimplemented!("no other schemes supported - given: {}", other),
         }
     }
