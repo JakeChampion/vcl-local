@@ -247,7 +247,7 @@ impl Default for Interpreter {
 impl Interpreter {
     pub fn interpret(&mut self, program: &Program) -> Result<(), String> {
         self.interrupted.store(false, Ordering::Release);
-        for stmt in &program.body {
+        for _stmt in &program.body {
             // println!("stmt: {:?}", stmt);
             // 1. setup backends + healthchecks
             // 2. setup directors

@@ -1406,7 +1406,7 @@ impl Parser {
         // TODO: handle context-specific identifiers such as `always` in a backend definition
         // TODO: handle custom identifiers such as backend names, subroutine names, table names, acl names, function names.
         let token = self.previous().clone();
-        let v = String::from_utf8(token.lexeme.clone()).unwrap();
+        let v = String::from_utf8(token.lexeme).unwrap();
         let name_token;
         match v.as_str() {
             "var" => {
