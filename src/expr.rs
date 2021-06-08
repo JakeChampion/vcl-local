@@ -1,4 +1,4 @@
-use http_types::{Method};
+use hyper::{Method};
 
 use derive_builder::Builder;
 #[derive(Debug, Clone)]

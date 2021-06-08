@@ -1,4 +1,4 @@
-use http_types::Method;
+use hyper::Method;
 
 use crate::{expr::{self, Probe, Program, Scheme}, scanner::Literal};
 use crate::scanner;

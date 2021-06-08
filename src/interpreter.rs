@@ -1,9 +1,17 @@
+use hyper::{
+    service::{make_service_fn, service_fn},
+    Body, Client, Error, Method, Request, Response, Server,
+};
+use std::u16;
+use std::{collections::HashMap, io, sync::Arc};
+use tokio::time::{interval, sleep, Duration};
+use tokio::{sync::RwLock, time::timeout};
+
 use std::num::Wrapping;
-use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
 
 use crate::expr::{self, Program, Symbol};
+use crate::expr::{DurationUnit, ABDIST};
 use std::fmt;
 
 static INIT: &str = "init";
@@ -18,6 +26,18 @@ pub struct Function {
     pub name: String,
     pub arity: u8,
     pub callable: fn(&mut Interpreter, &[Value]) -> Result<Value, String>,
+}
+
+#[derive(Clone)]
+pub struct Backend {
+    pub name: String,
+    pub health: Arc<RwLock<bool>>,
+}
+
+impl fmt::Debug for Backend {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Backend({})", self.name)
+    }
 }
 
 impl fmt::Debug for Function {
@@ -42,6 +62,7 @@ pub enum Value {
     String(String),
     Bool(bool),
     Function(Function),
+    Backend(Backend),
     Nil,
 }
 
@@ -54,6 +75,7 @@ fn as_callable(_interpreter: &Interpreter, value: &Value) -> Option<Box<dyn Call
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum Type {
+    Backend,
     Id,
     Ip,
     Time,
@@ -72,6 +94,7 @@ pub const fn type_of(val: &Value) -> Type {
         Value::Integer(_) => Type::Integer,
         Value::String(_) => Type::String,
         Value::Bool(_) => Type::Bool,
+        Value::Backend(_) => Type::Backend,
         Value::Function(_) => Type::Function,
         Value::Nil => Type::Nil,
     }
@@ -85,6 +108,7 @@ impl fmt::Display for Value {
             Value::String(s) => write!(f, "'{}'", s),
             Value::Bool(b) => write!(f, "{}", b),
             Value::Function(func) => write!(f, "Function({})", func.name),
+            Value::Backend(backend) => write!(f, "Backend({})", backend.name),
             Value::Nil => write!(f, "nil"),
         }
     }
@@ -107,14 +131,17 @@ pub enum LookupResult<'a> {
     UndefButDeclared(SourceLocation),
     UndefAndNotDeclared,
 }
-fn int_to_float (b:i64) -> f64 {
+fn int_to_float(b: i64) -> f64 {
     let bf: Option<f64> = num_traits::cast::FromPrimitive::from_i64(b);
     if let Some(bf) = bf {
         if bf as i64 == b {
             return bf;
         }
     }
-    panic!("Integer {} is not exactly representable as a floating-point number", b);
+    panic!(
+        "Integer {} is not exactly representable as a floating-point number",
+        b
+    );
 }
 fn expr_type_to_interpreter_type(expr_type: &expr::Type) -> Type {
     match expr_type {
@@ -221,6 +248,7 @@ pub struct Interpreter {
     pub counter: u64,
     pub env: Environment,
     pub globals: Environment,
+    pub health: HashMap<String, Arc<RwLock<bool>>>,
     pub retval: Option<Value>,
     pub output: Vec<String>,
     pub interrupted: Arc<AtomicBool>,
@@ -236,6 +264,7 @@ impl Default for Interpreter {
             counter: 0,
             env: Environment::default(),
             globals,
+            health: HashMap::new(),
             retval: None,
             output: Vec::default(),
             interrupted: Arc::new(AtomicBool::new(false)),
@@ -247,16 +276,29 @@ impl Default for Interpreter {
 impl Interpreter {
     pub fn interpret(&mut self, program: &Program) -> Result<(), String> {
         self.interrupted.store(false, Ordering::Release);
+        let backends: Vec<&ABDIST> = program
+            .body
+            .iter()
+            .filter(|c| match c {
+                expr::ABDIST::Backend(_) => true,
+                _ => false,
+            })
+            .collect();
+
+        for backend in backends {
+            if let ABDIST::Backend(backend) = backend {}
+        }
         for _stmt in &program.body {
             // println!("stmt: {:?}", stmt);
             // 1. setup backends + healthchecks
+
             // 2. setup directors
             // 3. setup acls
             // 4. setup imports
-            // 
+            //
             // 5. setup tables
             // 6. setup subroutine state machine
-            // 
+            //
             // self.execute(stmt)?
         }
         Ok(())
@@ -553,7 +595,9 @@ impl Interpreter {
         };
 
         let v = match (sym_val, int) {
-            (Value::Integer(a), expr::Literal::Integer(b)) => Value::Integer(Wrapping((a.0).rem_euclid(*b))),
+            (Value::Integer(a), expr::Literal::Integer(b)) => {
+                Value::Integer(Wrapping((a.0).rem_euclid(*b)))
+            }
             (Value::Float(a), expr::Literal::Float(b)) => Value::Float(a.rem_euclid(*b)),
             _ => {
                 panic!("no please don't make me %= things of different types")
@@ -972,5 +1016,138 @@ impl Interpreter {
                 todo!()
             }
         }
+    }
+
+    fn interpret_backend(&mut self, backend: expr::Backend) {
+        let lock: Arc<RwLock<bool>> = Arc::new(RwLock::new(true));
+        self.health.insert(backend.clone().name.name, lock.clone());
+        self.globals.define(
+            backend.clone().name,
+            Type::Backend,
+            Some(Value::Backend(Backend {
+                health: lock.clone(),
+                name: backend.clone().name.name,
+            })),
+        );
+        let _handle = tokio::spawn(probe(backend, lock.clone()));
+    }
+}
+
+fn interpret_duration(amount: f64, unit: &DurationUnit) -> Duration {
+    match unit {
+        expr::DurationUnit::Milliseconds => Duration::from_millis(amount as u64),
+        expr::DurationUnit::Seconds => Duration::from_secs_f64(amount * 1000_f64),
+        expr::DurationUnit::Minutes => Duration::from_secs_f64(amount * f64::from(1000 * 60)),
+        expr::DurationUnit::Hours => Duration::from_secs_f64(amount * f64::from(1000 * 60 * 60)),
+        expr::DurationUnit::Days => {
+            Duration::from_secs_f64(amount * f64::from(1000 * 60 * 60 * 24))
+        }
+        expr::DurationUnit::Years => Duration::from_secs(amount as u64 * 1000 * 60 * 60 * 24 * 365),
+    }
+}
+
+async fn probe(
+    backend: expr::Backend,
+    lock: Arc<RwLock<bool>>,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let check = &backend.body.probe.unwrap();
+    if let Some(expr::Expr::Literal(expr::Literal::True)) = check.dummy {
+        return Ok(());
+    }
+    // Run the probe based on it's configured interval
+    let interval_amount =
+        if let Some(expr::Expr::Literal(expr::Literal::Duration(amount, unit))) = &check.interval {
+            interpret_duration(*amount, unit)
+        } else {
+            todo!()
+        };
+    let mut interval = interval(interval_amount);
+    let mut counter =
+        if let Some(expr::Expr::Literal(expr::Literal::Integer(initial))) = &check.initial {
+            *initial
+        } else {
+            todo!()
+        };
+
+    let expected_response =
+        if let Some(expr::Expr::Literal(expr::Literal::Integer(expected_response))) =
+            &check.expected_response
+        {
+            *expected_response
+        } else {
+            todo!()
+        };
+
+    let window = if let Some(expr::Expr::Literal(expr::Literal::Integer(window))) = &check.window {
+        *window
+    } else {
+        todo!()
+    };
+
+    let threshold =
+        if let Some(expr::Expr::Literal(expr::Literal::Integer(threshold))) = &check.threshold {
+            *threshold
+        } else {
+            todo!()
+        };
+
+    let timeout_amount =
+        if let Some(expr::Expr::Literal(expr::Literal::Duration(amount, unit))) = &check.timeout {
+            interpret_duration(*amount, unit)
+        } else {
+            todo!()
+        };
+
+    let p = check.request.as_ref().expect("asdasfadfsdf111");
+    let host = if let Some(expr::Expr::Literal(expr::Literal::String(host))) = backend.body.host {
+        host
+    } else {
+        todo!()
+    };
+    loop {
+        interval.tick().await;
+
+        // TODO parse the check.request for this info
+        let mut req = Request::builder()
+            .method(p.method.clone())
+            .uri(format!("{}{}{}", "http://", host, p.path)); // TODO: Get and protocol from the backend
+        for header in &p.headers {
+            req = req.header(&header.0, &header.1);
+        }
+
+        let req = req.body(Body::empty())?;
+        let client = Client::new();
+
+        // println!("req: {:?}", req);
+
+        // TODO: Take into account the configured unit instead of assuming millis
+        match timeout(timeout_amount, client.request(req)).await {
+            Ok(Ok(resp)) => {
+                if resp.status() == expected_response as u16 {
+                    if counter < window {
+                        counter += 1;
+                    }
+                } else if counter > 0 {
+                    counter -= 1;
+                }
+                println!("Response: {}", resp.status());
+            }
+            _ => {
+                if counter > 0 {
+                    counter -= 1;
+                }
+            }
+        }
+        if counter >= threshold {
+            let mut w = lock.write().await;
+            *w = true;
+        } else {
+            let mut w = lock.write().await;
+            *w = false;
+        }
+        println!("Healthy: {}", lock.read().await);
+        println!("counter: {}", counter);
+        println!("threshold: {}", threshold);
+        println!("window: {}", window);
     }
 }
