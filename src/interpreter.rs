@@ -3,8 +3,8 @@ use hyper::{
     Body, Client, Error, Method, Request, Response, Server,
 };
 use std::u16;
-use std::{collections::HashMap, io, sync::Arc};
-use tokio::time::{interval, sleep, Duration};
+use std::{collections::HashMap, sync::Arc};
+use tokio::time::{interval, Duration};
 use tokio::{sync::RwLock, time::timeout};
 
 use std::num::Wrapping;
@@ -286,7 +286,7 @@ impl Interpreter {
             .collect();
 
         for backend in backends {
-            if let ABDIST::Backend(backend) = backend {}
+            if let ABDIST::Backend(_backend) = backend {}
         }
         for _stmt in &program.body {
             // println!("stmt: {:?}", stmt);
@@ -1029,7 +1029,7 @@ impl Interpreter {
                 name: backend.clone().name.name,
             })),
         );
-        let _handle = tokio::spawn(probe(backend, lock.clone()));
+        let _handle = tokio::spawn(probe(backend, lock));
     }
 }
 
