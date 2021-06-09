@@ -1,4 +1,4 @@
-# Fastly VCL Interpreters in Rust
+# Fastly VCL Interpreter in Rust
 
 A tree-walk interpreter for Fastly VCL
 
