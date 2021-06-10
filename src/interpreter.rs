@@ -274,33 +274,67 @@ impl Default for Interpreter {
 }
 
 impl Interpreter {
-    pub fn interpret(&mut self, program: &Program) -> Result<(), String> {
+    pub async fn interpret(&mut self, program: &Program) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         self.interrupted.store(false, Ordering::Release);
-        let backends: Vec<&ABDIST> = program
+        let backends: Vec<&Box<expr::Backend>> = program
             .body
             .iter()
-            .filter(|c| match c {
-                expr::ABDIST::Backend(_) => true,
-                _ => false,
+            .filter_map(|c| match c {
+                expr::ABDIST::Backend(b) => Some(b),
+                _ => None,
             })
             .collect();
 
+        // 1. setup backends + healthchecks
+        // 2. setup directors TODO
         for backend in backends {
-            if let ABDIST::Backend(_backend) = backend {}
+            self.interpret_backend(backend);
         }
-        for _stmt in &program.body {
-            // println!("stmt: {:?}", stmt);
-            // 1. setup backends + healthchecks
+        // 3. setup acls TODO
+        // 4. setup tables
+        // 5. setup subroutine state machine
+        let subroutines: Vec<&expr::SubDecl> = program
+            .body
+            .iter()
+            .filter_map(|c| match c {
+                expr::ABDIST::SubDecl(b) => Some(b),
+                _ => None,
+            })
+            .collect();
+        
+        // Construct our SocketAddr to listen on...
+        let addr = ([127, 0, 0, 1], 3000).into();
 
-            // 2. setup directors
-            // 3. setup acls
-            // 4. setup imports
-            //
-            // 5. setup tables
-            // 6. setup subroutine state machine
-            //
-            // self.execute(stmt)?
+        // And a MakeService to handle each connection...
+        let make_svc = make_service_fn(move |_| {
+            // let recvs = recvs.clone();
+            async move {
+                Ok::<_, Error>(service_fn(move |_req| {
+                    // let recvs = recvs.clone();
+                    async move {
+                        Ok::<_, Error>(Response::new(Body::from("Hello World")))
+                    }
+                }))
+            }
+        });
+
+        // Then bind and serve...
+        let server = Server::bind(&addr)
+            .serve(make_svc);
+
+        println!("listening on: http://{}", server.local_addr());
+
+        // Run forever-ish...
+        if let Err(err) = server.await {
+            eprintln!("server error: {}", err);
         }
+        
+        // for _stmt in &program.body {
+        //     // println!("stmt: {:?}", stmt);
+        //     //
+        //     //
+        //     // self.execute(stmt)?
+        // }
         Ok(())
     }
 
@@ -1018,7 +1052,7 @@ impl Interpreter {
         }
     }
 
-    fn interpret_backend(&mut self, backend: expr::Backend) {
+    fn interpret_backend(&mut self, backend: &Box<expr::Backend>) {
         let lock: Arc<RwLock<bool>> = Arc::new(RwLock::new(true));
         self.health.insert(backend.clone().name.name, lock.clone());
         self.globals.define(
@@ -1029,7 +1063,7 @@ impl Interpreter {
                 name: backend.clone().name.name,
             })),
         );
-        let _handle = tokio::spawn(probe(backend, lock));
+        let _handle = tokio::spawn(probe(*backend.clone(), lock));
     }
 }
 
@@ -1050,7 +1084,7 @@ async fn probe(
     backend: expr::Backend,
     lock: Arc<RwLock<bool>>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let check = &backend.body.probe.unwrap();
+    let check = backend.body.clone().probe.unwrap();
     if let Some(expr::Expr::Literal(expr::Literal::True)) = check.dummy {
         return Ok(());
     }
@@ -1099,7 +1133,7 @@ async fn probe(
         };
 
     let p = check.request.as_ref().expect("asdasfadfsdf111");
-    let host = if let Some(expr::Expr::Literal(expr::Literal::String(host))) = backend.body.host {
+    let host = if let Some(expr::Expr::Literal(expr::Literal::String(host))) = backend.body.clone().host {
         host
     } else {
         todo!()
@@ -1107,10 +1141,9 @@ async fn probe(
     loop {
         interval.tick().await;
 
-        // TODO parse the check.request for this info
         let mut req = Request::builder()
             .method(p.method.clone())
-            .uri(format!("{}{}{}", "http://", host, p.path)); // TODO: Get and protocol from the backend
+            .uri(format!("{}{}{}", "http://", host, p.path)); // TODO: Get protocol from the backend
         for header in &p.headers {
             req = req.header(&header.0, &header.1);
         }
@@ -1120,7 +1153,6 @@ async fn probe(
 
         // println!("req: {:?}", req);
 
-        // TODO: Take into account the configured unit instead of assuming millis
         match timeout(timeout_amount, client.request(req)).await {
             Ok(Ok(resp)) => {
                 if resp.status() == expected_response as u16 {

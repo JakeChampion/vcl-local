@@ -1,29 +1,37 @@
 #![feature(wrapping_int_impl)]
-#![allow(dead_code)]
-#![forbid(unsafe_code, future_incompatible, rust_2018_idioms)]
-#![deny(missing_debug_implementations, nonstandard_style)]
-#![warn(
-    // clippy::all,
-    // clippy::restriction,
-    clippy::pedantic,
-    clippy::nursery,
-)]
-
+// #![allow(dead_code)]
+// #![forbid(unsafe_code, future_incompatible, rust_2018_idioms)]
+// #![deny(missing_debug_implementations, nonstandard_style)]
+// #![warn(
+//     // clippy::all,
+//     // clippy::restriction,
+//     clippy::pedantic,
+//     clippy::nursery,
+// )]
 use clap::{App, Arg};
+use hyper::{
+    service::{make_service_fn, service_fn},
+    Body, Client, Error, Method, Request, Response, Server,
+};
+use std::u16;
+use std::{collections::HashMap, io, sync::Arc};
+use tokio::time::{interval, sleep, Duration};
+use tokio::{sync::RwLock, time::timeout};
 
 use std::fs;
 
 mod expr;
+mod interpreter;
 mod parser;
 mod scanner;
-mod interpreter;
 
 static INPUT_STR: &str = "INPUT";
 static SHOW_TOKENS_STR: &str = "show tokens";
 static SHOW_AST_STR: &str = "show ast";
 static SYNTAX_CHECK: &str = "check syntax";
 
-fn main() {
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let matches = App::new("vcl")
         .version("0.1.0")
         .about("vcl language interpreter")
@@ -54,63 +62,40 @@ fn main() {
         )
         .get_matches();
 
-    if let Some(input_file) = matches.value_of(INPUT_STR) {
-        let maybe_input = fs::read_to_string(input_file);
+    let input_file = matches.value_of(INPUT_STR).expect("require input file");
+    let input = fs::read_to_string(input_file).expect(&format!("Error reading {}", input_file));
 
-        match maybe_input {
-            Ok(input) => match scanner::scan_tokens(input) {
-                Ok(tokens) => {
-                    if matches.is_present(SHOW_TOKENS_STR) {
-                        println!("tokens: {:#?}", tokens);
-                        std::process::exit(0);
-                    }
-
-                    let stmts_maybe = parser::parse(tokens);
-
-                    match stmts_maybe {
-                        Ok(program) => {
-                            if matches.is_present(SYNTAX_CHECK) {
-                                println!("successfully parsed");
-                                std::process::exit(0);
-                            }
-                            if matches.is_present(SHOW_AST_STR) {
-                                println!("AST: {:#?}", program);
-                                std::process::exit(0);
-                            }
-
-                            let mut interpreter: interpreter::Interpreter =
-                                interpreter::Interpreter::default();
-                            let interpret_result = interpreter.interpret(&program);
-
-                            match interpret_result {
-                                Ok(_) => {
-                                    std::process::exit(0);
-                                }
-                                Err(err) => {
-                                    println!(
-                                        "Runtime Error: {}\n\n{}",
-                                        err,
-                                        interpreter.format_backtrace()
-                                    );
-                                    std::process::exit(-1);
-                                }
-                            }
-                        }
-                        Err(err) => {
-                            println!("parse error: {:?}", err);
-                            std::process::exit(-1)
-                        }
-                    }
-                }
-                Err(err) => {
-                    println!("lexical error: {}", err);
-                    std::process::exit(-1);
-                }
-            },
-            Err(err) => {
-                println!("Error reading {}: {}", input_file, err);
-                std::process::exit(-1);
-            }
+    let tokens = scanner::scan_tokens(input);
+    let only_tokenize = matches.is_present(SHOW_TOKENS_STR);
+    let tokens = match tokens {
+        Ok(tokens) => tokens,
+        Err(err) => {
+            println!("lexical error: {}", err);
+            std::process::exit(-1);
         }
+    };
+    if only_tokenize {
+        println!("tokens: {:#?}", tokens);
+        std::process::exit(0);
     }
+
+    let program = match parser::parse(tokens) {
+        Ok(program) => program,
+        Err(err) => {
+            println!("parse error: {:?}", err);
+            std::process::exit(-1);
+        }
+    };
+
+    if matches.is_present(SYNTAX_CHECK) {
+        println!("successfully parsed");
+        std::process::exit(0);
+    }
+    if matches.is_present(SHOW_AST_STR) {
+        println!("AST: {:#?}", program);
+        std::process::exit(0);
+    }
+
+    let mut interpreter: interpreter::Interpreter = interpreter::Interpreter::default();
+    interpreter.interpret(&program).await
 }
