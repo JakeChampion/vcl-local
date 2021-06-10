@@ -224,6 +224,11 @@ pub struct Program {
 }
 
 #[derive(Debug, Clone)]
+pub struct Req {
+
+}
+
+#[derive(Debug, Clone)]
 pub enum ABDIST {
     Acl(Acl),
     Backend(Box<Backend>),
@@ -311,6 +316,7 @@ pub enum Type {
     String,
     Time,
     Director,
+    Req
 }
 
 #[derive(Debug, Clone, PartialEq)]

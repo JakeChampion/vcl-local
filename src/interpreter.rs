@@ -64,6 +64,7 @@ pub enum Value {
     Function(Function),
     Backend(Backend),
     Nil,
+    Req(Req),
 }
 
 fn as_callable(_interpreter: &Interpreter, value: &Value) -> Option<Box<dyn Callable>> {
@@ -86,6 +87,19 @@ pub enum Type {
     Bool,
     Nil,
     Function,
+    Req
+}
+
+#[derive(Clone)]
+pub struct Req {
+
+}
+
+
+impl fmt::Debug for Req {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Req({:?})", self)
+    }
 }
 
 pub const fn type_of(val: &Value) -> Type {
@@ -96,6 +110,7 @@ pub const fn type_of(val: &Value) -> Type {
         Value::Bool(_) => Type::Bool,
         Value::Backend(_) => Type::Backend,
         Value::Function(_) => Type::Function,
+        Value::Req(_) => Type::Req,
         Value::Nil => Type::Nil,
     }
 }
@@ -109,6 +124,7 @@ impl fmt::Display for Value {
             Value::Bool(b) => write!(f, "{}", b),
             Value::Function(func) => write!(f, "Function({})", func.name),
             Value::Backend(backend) => write!(f, "Backend({})", backend.name),
+            Value::Req(req) => write!(f, "Req({:?})", req),
             Value::Nil => write!(f, "nil"),
         }
     }
@@ -244,6 +260,7 @@ impl Environment {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct Interpreter {
     pub counter: u64,
     pub env: Environment,
@@ -293,24 +310,40 @@ impl Interpreter {
         // 3. setup acls TODO
         // 4. setup tables
         // 5. setup subroutine state machine
-        let subroutines: Vec<&expr::SubDecl> = program
+        let subroutines: Vec<expr::SubDecl> = program
             .body
             .iter()
             .filter_map(|c| match c {
-                expr::ABDIST::SubDecl(b) => Some(b),
+                expr::ABDIST::SubDecl(b) => Some(b.clone()),
                 _ => None,
             })
             .collect();
+        let recvs: Vec<expr::SubDecl> = subroutines.iter().filter_map(|s| {
+            if s.name.name == "vcl_recv" {
+                Some(s.clone())
+            } else {
+                None
+            }
+        }).collect();
         
         // Construct our SocketAddr to listen on...
         let addr = ([127, 0, 0, 1], 3000).into();
 
         // And a MakeService to handle each connection...
         let make_svc = make_service_fn(move |_| {
-            // let recvs = recvs.clone();
+            let recvs = recvs.clone();
+            let mut s = self.clone();
             async move {
                 Ok::<_, Error>(service_fn(move |_req| {
-                    // let recvs = recvs.clone();
+                    let mut s = s.clone();
+                    let recvs = recvs.clone();
+                    let rreq = Symbol {
+                        name: "req".to_string(),
+                        line: 0,
+                        col: 0,
+                        var_type: Some(expr::Type::Req),
+                    };
+                    s.globals.define(rreq, Type::Req, Some(Value::Req(Req {})));
                     async move {
                         Ok::<_, Error>(Response::new(Body::from("Hello World")))
                     }
