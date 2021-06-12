@@ -10,7 +10,7 @@ use tokio::{sync::RwLock, time::timeout};
 use std::num::Wrapping;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use crate::expr::{self, Program, Symbol};
+use crate::expr::{self, Program, Stmt, SubDecl, Symbol};
 use crate::expr::{DurationUnit, ABDIST};
 use std::fmt;
 
@@ -92,13 +92,20 @@ pub enum Type {
 
 #[derive(Clone)]
 pub struct Req {
-
+    // The request body. Using this variable for binary data will truncate at the first null character. Limited to 8KB in size.
+    // Exceeding the limit results in the req.body variable being blank.
+    // https://developer.fastly.com/reference/vcl/variables/client-request/req-body/
+    pub body: String,
+    // The variable req.postbody is an alias for req.body.
+    // https://developer.fastly.com/reference/vcl/variables/client-request/req-postbody/
+    pub postbody: String,
+    pub url: String,
 }
 
 
 impl fmt::Debug for Req {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Req({:?})", self)
+        write!(f, "Req({})", self.url)
     }
 }
 
@@ -124,7 +131,7 @@ impl fmt::Display for Value {
             Value::Bool(b) => write!(f, "{}", b),
             Value::Function(func) => write!(f, "Function({})", func.name),
             Value::Backend(backend) => write!(f, "Backend({})", backend.name),
-            Value::Req(req) => write!(f, "Req({:?})", req),
+            Value::Req(req) => write!(f, "{}", req.url),
             Value::Nil => write!(f, "nil"),
         }
     }
@@ -332,19 +339,47 @@ impl Interpreter {
         // And a MakeService to handle each connection...
         let make_svc = make_service_fn(move |_| {
             let recvs = recvs.clone();
-            let mut s = self.clone();
+            let s = self.clone();
+            let program = program.clone();
             async move {
-                Ok::<_, Error>(service_fn(move |_req| {
+                Ok::<_, Error>(service_fn(move |req: Request<Body>| {
+                    let program = program.clone();
                     let mut s = s.clone();
                     let recvs = recvs.clone();
+                    let mut stmts = vec![];
+                    for mut sub in recvs {
+                        stmts.append(&mut sub.body)
+                    }
+                    let recv = SubDecl {
+                        name: Symbol {
+                            name: "vcl_recv".to_string(),
+                            line: 0,
+                            col: 0,
+                            var_type: None,
+                        },
+                        body: stmts
+                    };
                     let rreq = Symbol {
                         name: "req".to_string(),
                         line: 0,
                         col: 0,
-                        var_type: Some(expr::Type::Req),
+                        var_type: None,
                     };
-                    s.globals.define(rreq, Type::Req, Some(Value::Req(Req {})));
+                    let uri = req.uri().to_string();
+                    let mut b = req.into_body();
                     async move {
+                        let b = hyper::body::to_bytes(b).await.expect("11111213");
+                        s.globals.define(rreq, Type::Req, Some(Value::Req(Req {
+                            url: uri,
+                            body: std::str::from_utf8(&b).unwrap().to_string(),
+                            postbody: std::str::from_utf8(&b).unwrap().to_string(),
+                        })));
+                        for stmt in recv.body {
+                            println!("stmt: {:?}", stmt);
+                            
+                            
+                            s.execute(&stmt).expect("sadasdaasda");
+                        }
                         Ok::<_, Error>(Response::new(Body::from("Hello World")))
                     }
                 }))
@@ -502,7 +537,7 @@ impl Interpreter {
             expr::Expr::Unary(op, e) => self.interpret_unary(*op, e),
             expr::Expr::Binary(lhs, op, rhs) => self.interpret_binary(lhs, *op, rhs),
             expr::Expr::Call(callee, loc, args) => self.call(callee, loc, args),
-            expr::Expr::Get(_lhs, _attr) => todo!(), //self.getattr(lhs, &attr.name),
+            expr::Expr::Get(lhs, attr) => todo!(),//self.getattr(lhs, &attr.name),
             expr::Expr::Grouping(e) => self.interpret_expr(e),
             expr::Expr::Variable(sym) => match self.lookup(sym) {
                 Ok(val) => Ok(val.clone()),

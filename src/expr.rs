@@ -228,6 +228,9 @@ pub struct Req {
 
 }
 
+impl Req {
+}
+
 #[derive(Debug, Clone)]
 pub enum ABDIST {
     Acl(Acl),

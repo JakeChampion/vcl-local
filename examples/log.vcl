@@ -1,3 +1,3 @@
 sub vcl_recv {
-    log req;
+    log req.url;
 }
