@@ -1,6 +1,6 @@
 use hyper::{
     service::{make_service_fn, service_fn},
-    Body, Client, Error, Method, Request, Response, Server,
+    Body, Client, Error, Method, Request, Response, Server, Version,
 };
 use std::u16;
 use std::{collections::HashMap, sync::Arc};
@@ -87,7 +87,7 @@ pub enum Type {
     Bool,
     Nil,
     Function,
-    Req
+    Req,
 }
 
 #[derive(Clone)]
@@ -96,12 +96,129 @@ pub struct Req {
     // Exceeding the limit results in the req.body variable being blank.
     // https://developer.fastly.com/reference/vcl/variables/client-request/req-body/
     pub body: String,
+    // Total body bytes read from the client generating the request.
+    // https://developer.fastly.com/reference/vcl/variables/client-request/req-body-bytes-read/
+    pub body_bytes_read: usize,
+    // Total bytes read from the client generating the request.
+    // https://developer.fastly.com/reference/vcl/variables/client-request/req-bytes-read/
+    pub bytes_read: usize,
+    // Apply range handling for responses on pass.
+    // https://developer.fastly.com/reference/vcl/variables/client-request/req-enable-range-on-pass/
+    pub enable_range_on_pass: bool,
+    // Assemble the response from individually cacheable block-aligned file segments.
+    // https://developer.fastly.com/reference/vcl/variables/client-request/req-enable-segmented-caching/
+    pub enable_segmented_caching: bool,
+    // Forces the request to miss whether we have a cached version of the object or not. This differs from passing in that Varnish will still request collapse and will avoid the creation of hit_for_pass objects.
+    // https://developer.fastly.com/reference/vcl/variables/client-request/req-hash-always-miss/
+    pub hash_always_miss: bool,
+    // When there is more than one simultaneous cache miss for an object, Varnish will normally put all but one of the threads handling those requests to sleep. Thus, only one cache miss hits the origin and the rest wait for that response. req.hash_ignore_busy overrides this behavior and lets all requests through simultaneously.
+    // https://developer.fastly.com/reference/vcl/variables/client-request/req-hash-ignore-busy/
+    pub hash_ignore_busy: bool,
+    // Total header bytes read from the client generating the request.
+    // https://developer.fastly.com/reference/vcl/variables/client-request/req-header-bytes-read/
+    pub header_bytes_read: usize,
+    // Whether VCL is being evaluated for a stale while revalidate request to a backend.
+    // https://developer.fastly.com/reference/vcl/variables/client-request/req-is-background-fetch/
+    pub is_background_fetch: bool,
+    // Whether the handled request is a purge request.
+    // https://developer.fastly.com/reference/vcl/variables/client-request/req-is-purge/
+    pub is_purge: bool,
+    // HTTP method sent by the client, such as "GET" or "POST".
+    // Requests using the HTTP PURGE method will appear in VCL as "FASTLYPURGE". All other methods are reported as received, including any unknown or unrecognized methods, provided that the request is syntactically valid HTTP.
+    // https://developer.fastly.com/reference/vcl/variables/client-request/req-method/
+    pub method: String,
     // The variable req.postbody is an alias for req.body.
     // https://developer.fastly.com/reference/vcl/variables/client-request/req-postbody/
     pub postbody: String,
+    // HTTP protocol version in use for this request. For example HTTP/1.1.
+    // https://developer.fastly.com/reference/vcl/variables/client-request/req-proto/
+    pub proto: String,
+    // Alias of req.method.
+    // https://developer.fastly.com/reference/vcl/variables/client-request/req-request/
+    pub request: String,
+    // The full path, including query parameters.
+    // https://developer.fastly.com/reference/vcl/variables/client-request/req-url/
     pub url: String,
+    // The file name specified in a URL. This will be the last component of the path, from the last / to the end, not including the query string.
+    // https://developer.fastly.com/reference/vcl/variables/client-request/req-url-basename/
+    // pub url.basename: String,
+    // The directories specified in a URL. This will be from the beginning of the URL up to the last /, not including the query string. The last / will not be part of req.url.dirname unless req.url.dirname is / (the root directory).
+    // https://developer.fastly.com/reference/vcl/variables/client-request/req-url-dirname/
+    // pub url.dirname: String,
+    // The file extension specified in a URL.
+    // https://developer.fastly.com/reference/vcl/variables/client-request/req-url-ext/
+    // pub url.ext: String,
+    // The full path, without any query parameters.
+    // This variable is updated any time req.url is set.
+    // pub url.path: String,
+    // The query string portion of req.url. This will be from immediately after the ? to the end of the URL.
+    // https://developer.fastly.com/reference/vcl/variables/client-request/req-url-qs/
+    // pub url.qs: String,
+    // Request ID.
+    // https://developer.fastly.com/reference/vcl/variables/client-request/req-xid/
+    pub xid: String,
+    // The backend to use to service the request.
+    // https://developer.fastly.com/reference/vcl/variables/backend-connection/req-backend/
+    // pub backend: Backend,
+    // Whether or not this backend, or recursively any of the backends under this director, is considered healthy.
+    // https://developer.fastly.com/reference/vcl/variables/backend-connection/req-backend-healthy/
+    // pub backend.healthy: Bool,
+    // pub backend.is_cluser: Bool,
+    // Indicates whether the backend is a customer origin.
+    // https://developer.fastly.com/reference/vcl/variables/backend-connection/req-backend-is-origin/
+    // pub backend.is_origin: Bool,
+    // Indicates whether the backend is a Fastly Shield POP.
+    // https://developer.fastly.com/reference/vcl/variables/backend-connection/req-backend-is-shield/
+    // pub backend.is_shield: Bool,
+    // The name of the backend that was used for this request.
+    // https://developer.fastly.com/reference/vcl/variables/backend-response/beresp-backend-name/
+    // pub backend.name: String,
 }
 
+impl Req {
+    async fn from_hyper_req(req: Request<Body>) -> Self {
+        let uri = req.uri().to_string();
+        let headers = req.headers();
+        let mut header_bytes_read = 0;
+        for (key, value) in headers.iter() {
+            header_bytes_read += key.to_string().len();
+            header_bytes_read += value.len();
+        }
+        let method = req.method().to_string();
+        let proto = match req.version() {
+            Version::HTTP_09 => "HTTP/0.9".to_string(),
+            Version::HTTP_10 => "HTTP/1.0".to_string(),
+            Version::HTTP_11 => "HTTP/1.1".to_string(),
+            Version::HTTP_2 => "HTTP/2.0".to_string(),
+            Version::HTTP_3 => "HTTP/3.0".to_string(),
+            _ => todo!(),
+        };
+        let body = req.into_body();
+        let body_as_bytes = hyper::body::to_bytes(body).await.expect("11111213");
+        let body = std::str::from_utf8(&body_as_bytes).unwrap().to_string();
+        let body_bytes_read = body_as_bytes.len();
+        let bytes_read = header_bytes_read + body_bytes_read;
+
+        Req {
+            body: body.clone(),
+            body_bytes_read,
+            bytes_read,
+            enable_range_on_pass: false,
+            enable_segmented_caching: false,
+            hash_always_miss: false,
+            hash_ignore_busy: false,
+            header_bytes_read,
+            is_background_fetch: false,
+            is_purge: false,
+            method: method.clone(),
+            postbody: body,
+            proto,
+            request: method,
+            url: uri,
+            xid: "1".to_string(),
+        }
+    }
+}
 
 impl fmt::Debug for Req {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -298,7 +415,10 @@ impl Default for Interpreter {
 }
 
 impl Interpreter {
-    pub async fn interpret(&mut self, program: &Program) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn interpret(
+        &mut self,
+        program: &Program,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         self.interrupted.store(false, Ordering::Release);
         let backends: Vec<&Box<expr::Backend>> = program
             .body
@@ -325,14 +445,17 @@ impl Interpreter {
                 _ => None,
             })
             .collect();
-        let recvs: Vec<expr::SubDecl> = subroutines.iter().filter_map(|s| {
-            if s.name.name == "vcl_recv" {
-                Some(s.clone())
-            } else {
-                None
-            }
-        }).collect();
-        
+        let recvs: Vec<expr::SubDecl> = subroutines
+            .iter()
+            .filter_map(|s| {
+                if s.name.name == "vcl_recv" {
+                    Some(s.clone())
+                } else {
+                    None
+                }
+            })
+            .collect();
+
         // Construct our SocketAddr to listen on...
         let addr = ([127, 0, 0, 1], 3000).into();
 
@@ -357,27 +480,24 @@ impl Interpreter {
                             col: 0,
                             var_type: None,
                         },
-                        body: stmts
+                        body: stmts,
                     };
-                    let rreq = Symbol {
-                        name: "req".to_string(),
-                        line: 0,
-                        col: 0,
-                        var_type: None,
-                    };
-                    let uri = req.uri().to_string();
-                    let mut b = req.into_body();
                     async move {
-                        let b = hyper::body::to_bytes(b).await.expect("11111213");
-                        s.globals.define(rreq, Type::Req, Some(Value::Req(Req {
-                            url: uri,
-                            body: std::str::from_utf8(&b).unwrap().to_string(),
-                            postbody: std::str::from_utf8(&b).unwrap().to_string(),
-                        })));
+                        let rreq = Symbol {
+                            name: "req".to_string(),
+                            line: 0,
+                            col: 0,
+                            var_type: None,
+                        };
+                        let vcl_req = Req::from_hyper_req(req).await;
+                        
+                        s.globals.define(
+                            rreq,
+                            Type::Req,
+                            Some(Value::Req(vcl_req)),
+                        );
                         for stmt in recv.body {
                             println!("stmt: {:?}", stmt);
-                            
-                            
                             s.execute(&stmt).expect("sadasdaasda");
                         }
                         Ok::<_, Error>(Response::new(Body::from("Hello World")))
@@ -387,8 +507,7 @@ impl Interpreter {
         });
 
         // Then bind and serve...
-        let server = Server::bind(&addr)
-            .serve(make_svc);
+        let server = Server::bind(&addr).serve(make_svc);
 
         println!("listening on: http://{}", server.local_addr());
 
@@ -396,7 +515,7 @@ impl Interpreter {
         if let Err(err) = server.await {
             eprintln!("server error: {}", err);
         }
-        
+
         // for _stmt in &program.body {
         //     // println!("stmt: {:?}", stmt);
         //     //
@@ -537,7 +656,7 @@ impl Interpreter {
             expr::Expr::Unary(op, e) => self.interpret_unary(*op, e),
             expr::Expr::Binary(lhs, op, rhs) => self.interpret_binary(lhs, *op, rhs),
             expr::Expr::Call(callee, loc, args) => self.call(callee, loc, args),
-            expr::Expr::Get(lhs, attr) => todo!(),//self.getattr(lhs, &attr.name),
+            expr::Expr::Get(lhs, attr) => todo!(), //self.getattr(lhs, &attr.name),
             expr::Expr::Grouping(e) => self.interpret_expr(e),
             expr::Expr::Variable(sym) => match self.lookup(sym) {
                 Ok(val) => Ok(val.clone()),
@@ -1201,11 +1320,12 @@ async fn probe(
         };
 
     let p = check.request.as_ref().expect("asdasfadfsdf111");
-    let host = if let Some(expr::Expr::Literal(expr::Literal::String(host))) = backend.body.clone().host {
-        host
-    } else {
-        todo!()
-    };
+    let host =
+        if let Some(expr::Expr::Literal(expr::Literal::String(host))) = backend.body.clone().host {
+            host
+        } else {
+            todo!()
+        };
     loop {
         interval.tick().await;
 
