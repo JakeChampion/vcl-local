@@ -67,6 +67,79 @@ pub enum Value {
     Req(Req),
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub enum VarnishState {
+    Lookup,
+    Pass,
+    Error,
+    Restart,
+    Hash,
+    Deliver,
+    Fetch,
+    DeliverStale,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum VarnishRecvState {
+    Lookup,
+    Pass,
+    Error,
+    Restart,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum VarnishHashState {
+    Hash,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum VarnishHitState {
+    Deliver,
+    Pass,
+    Error,
+    Restart,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum VarnishMissState {
+    Fetch,
+    DeliverStale,
+    Pass,
+    Error,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum VarnishPassState {
+    Pass,
+    Error,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum VarnishFetchState {
+    Deliver,
+    DeliverStale,
+    Pass,
+    Error,
+    Restart,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum VarnishErrorState {
+    Deliver,
+    Restart,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum VarnishDeliverState {
+    Deliver,
+    Restart,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum VarnishLogState {
+    Deliver,
+}
+
 fn as_callable(_interpreter: &Interpreter, value: &Value) -> Option<Box<dyn Callable>> {
     match value {
         Value::Function(f) => Some(Box::new(f.clone())),
@@ -89,6 +162,37 @@ pub enum Type {
     Function,
     Req,
 }
+
+#[derive(Clone)]
+pub struct Resp {
+    // Body bytes send to the client in the response.
+    // https://developer.fastly.com/reference/vcl/variables/client-response/resp-body-bytes-written/
+    pub body_bytes_written: usize,
+    // Total bytes to send to the client in the response.
+    // https://developer.fastly.com/reference/vcl/variables/client-response/resp-bytes-written/
+    pub bytes_written: usize,
+    // Whether or not the request completed.
+    // https://developer.fastly.com/reference/vcl/variables/client-response/resp-completed/
+    pub completed: bool,
+    // Header bytes to send to the client in the response.
+    // https://developer.fastly.com/reference/vcl/variables/client-response/resp-header-bytes-written/
+    pub header_bytes_written: usize,
+    // Whether request handling went through vcl_error.
+    // https://developer.fastly.com/reference/vcl/variables/client-response/resp-is-locally-generated/
+    pub is_locally_generated: bool,
+    // HTTP protocol version in use for this request. For example HTTP/1.1.
+    // https://developer.fastly.com/reference/vcl/variables/client-response/resp-proto/
+    pub proto: String,
+    // The response phrase included with the status code.
+    // https://developer.fastly.com/reference/vcl/variables/client-response/resp-response/
+    pub response: String,
+    // The HTTP status code stored with the object.
+    // https://developer.fastly.com/reference/vcl/variables/client-response/resp-status/
+    pub status: usize,
+}
+
+// TODO: Resp.tarpit function
+// https://developer.fastly.com/reference/vcl/functions/miscellaneous/resp-tarpit/
 
 #[derive(Clone)]
 pub struct Req {
@@ -133,6 +237,9 @@ pub struct Req {
     // HTTP protocol version in use for this request. For example HTTP/1.1.
     // https://developer.fastly.com/reference/vcl/variables/client-request/req-proto/
     pub proto: String,
+    // Counts the number of times the VCL has been restarted.
+    // https://developer.fastly.com/reference/vcl/variables/server/req-restarts/
+    pub restarts: i8,
     // Alias of req.method.
     // https://developer.fastly.com/reference/vcl/variables/client-request/req-request/
     pub request: String,
@@ -213,6 +320,7 @@ impl Req {
             method: method.clone(),
             postbody: body,
             proto,
+            restarts: 0,
             request: method,
             url: uri,
             xid: "1".to_string(),
@@ -414,6 +522,54 @@ impl Default for Interpreter {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct Machine {
+    pub recv: expr::SubDecl,
+    pub hash: expr::SubDecl,
+    pub hit: expr::SubDecl,
+    pub miss: expr::SubDecl,
+    pub pass: expr::SubDecl,
+    pub fetch: expr::SubDecl,
+    pub error: expr::SubDecl,
+    pub deliver: expr::SubDecl,
+    pub log: expr::SubDecl,
+}
+
+#[derive(Debug, Clone)]
+pub struct App {
+    pub machine: Machine,
+    // backends: Vec<Backend>,
+    // directors: Vec<Director>,
+    // tables: Vec<Table>,
+    // acls: Vec<Acl>,
+}
+
+fn combine_subs(subroutines: &[expr::SubDecl], name: &str) -> expr::SubDecl {
+    let subs: Vec<expr::SubDecl> = subroutines
+        .iter()
+        .filter_map(|s| {
+            if s.name.name == name {
+                Some(s.clone())
+            } else {
+                None
+            }
+        })
+        .collect();
+    let mut stmts = vec![];
+    for mut sub in subs {
+        stmts.append(&mut sub.body)
+    }
+    SubDecl {
+        name: Symbol {
+            name: name.to_string(),
+            line: 0,
+            col: 0,
+            var_type: None,
+        },
+        body: stmts,
+    }
+}
+
 impl Interpreter {
     pub async fn interpret(
         &mut self,
@@ -445,61 +601,55 @@ impl Interpreter {
                 _ => None,
             })
             .collect();
-        let recvs: Vec<expr::SubDecl> = subroutines
+        let recv = combine_subs(&subroutines, "vcl_recv");
+        let hash = combine_subs(&subroutines, "vcl_hash");
+        let hit = combine_subs(&subroutines, "vcl_hit");
+        let miss = combine_subs(&subroutines, "vcl_miss");
+        let pass = combine_subs(&subroutines, "vcl_pass");
+        let fetch = combine_subs(&subroutines, "vcl_fetch");
+        let error = combine_subs(&subroutines, "vcl_error");
+        let deliver = combine_subs(&subroutines, "vcl_deliver");
+        let log = combine_subs(&subroutines, "vcl_log");
+        let custom_subs: Vec<expr::SubDecl> = subroutines
             .iter()
             .filter_map(|s| {
-                if s.name.name == "vcl_recv" {
-                    Some(s.clone())
-                } else {
+                if s.name.name.starts_with("vcl_") {
                     None
+                } else {
+                    Some(s.clone())
                 }
             })
             .collect();
+        let app = App {
+            machine: Machine {
+                recv,
+                hash,
+                hit,
+                miss,
+                pass,
+                fetch,
+                error,
+                deliver,
+                log,
+            },
+        };
 
         // Construct our SocketAddr to listen on...
         let addr = ([127, 0, 0, 1], 3000).into();
 
         // And a MakeService to handle each connection...
         let make_svc = make_service_fn(move |_| {
-            let recvs = recvs.clone();
+            let app = app.clone();
             let s = self.clone();
             let program = program.clone();
             async move {
                 Ok::<_, Error>(service_fn(move |req: Request<Body>| {
+                    let app = app.clone();
                     let program = program.clone();
                     let mut s = s.clone();
-                    let recvs = recvs.clone();
-                    let mut stmts = vec![];
-                    for mut sub in recvs {
-                        stmts.append(&mut sub.body)
-                    }
-                    let recv = SubDecl {
-                        name: Symbol {
-                            name: "vcl_recv".to_string(),
-                            line: 0,
-                            col: 0,
-                            var_type: None,
-                        },
-                        body: stmts,
-                    };
                     async move {
-                        let rreq = Symbol {
-                            name: "req".to_string(),
-                            line: 0,
-                            col: 0,
-                            var_type: None,
-                        };
-                        let vcl_req = Req::from_hyper_req(req).await;
-                        
-                        s.globals.define(
-                            rreq,
-                            Type::Req,
-                            Some(Value::Req(vcl_req)),
-                        );
-                        for stmt in recv.body {
-                            println!("stmt: {:?}", stmt);
-                            s.execute(&stmt).expect("sadasdaasda");
-                        }
+                        let mut vcl_req = Req::from_hyper_req(req).await;
+                        s.execute_app(&app, &mut vcl_req);
                         Ok::<_, Error>(Response::new(Body::from("Hello World")))
                     }
                 }))
@@ -525,6 +675,585 @@ impl Interpreter {
         Ok(())
     }
 
+    pub fn execute_app(&mut self, app: &App, req: &mut Req) -> Resp {
+        let state = self.execute_recv(app, req);
+        if state == VarnishRecvState::Restart {
+            // increase restart counter - req.restarts
+            // TODO: limit to 3.
+            req.restarts += 1;
+            return self.execute_app(app, req);
+        }
+        self.execute_hash(app, req);
+        match state {
+            VarnishRecvState::Lookup => {
+                // TODO: implement cache lookup
+                let cached = false;
+                if cached {
+                    let state = self.execute_hit(app, req);
+                    match state {
+                        VarnishHitState::Deliver => {
+                            let state = self.execute_deliver(app, req);
+                            match state {
+                                VarnishDeliverState::Deliver => self.execute_log(app, req),
+                                VarnishDeliverState::Restart => {
+                                    // increase restart counter - req.restarts
+                                    // TODO: limit to 3.
+                                    req.restarts += 1;
+                                    return self.execute_app(app, req);
+                                }
+                            };
+                        }
+                        VarnishHitState::Pass => {
+                            let state = self.execute_pass(app, req);
+                            match state {
+                                VarnishPassState::Pass => {
+                                    // TODO: Start the backend fetch request
+                                    let state = self.execute_fetch(app, req);
+                                    match state {
+                                        VarnishFetchState::Deliver => {
+                                            let state = self.execute_deliver(app, req);
+                                            match state {
+                                                VarnishDeliverState::Deliver => {
+                                                    self.execute_log(app, req)
+                                                }
+                                                VarnishDeliverState::Restart => {
+                                                    // increase restart counter - req.restarts
+                                                    // TODO: limit to 3.
+                                                    req.restarts += 1;
+                                                    return self.execute_app(app, req);
+                                                }
+                                            };
+                                        }
+                                        VarnishFetchState::DeliverStale => {
+                                            let state = self.execute_deliver(app, req);
+                                            match state {
+                                                VarnishDeliverState::Deliver => {
+                                                    self.execute_log(app, req)
+                                                }
+                                                VarnishDeliverState::Restart => {
+                                                    // increase restart counter - req.restarts
+                                                    // TODO: limit to 3.
+                                                    req.restarts += 1;
+                                                    return self.execute_app(app, req);
+                                                }
+                                            };
+                                        }
+                                        VarnishFetchState::Pass => {
+                                            let state = self.execute_deliver(app, req);
+                                            match state {
+                                                VarnishDeliverState::Deliver => {
+                                                    self.execute_log(app, req)
+                                                }
+                                                VarnishDeliverState::Restart => {
+                                                    // increase restart counter - req.restarts
+                                                    // TODO: limit to 3.
+                                                    req.restarts += 1;
+                                                    return self.execute_app(app, req);
+                                                }
+                                            };
+                                        }
+                                        VarnishFetchState::Error => {
+                                            let state = self.execute_error(app, req);
+                                            match state {
+                                                VarnishErrorState::Deliver => {
+                                                    let state = self.execute_deliver(app, req);
+                                                    match state {
+                                                        VarnishDeliverState::Deliver => {
+                                                            self.execute_log(app, req)
+                                                        }
+                                                        VarnishDeliverState::Restart => {
+                                                            // increase restart counter - req.restarts
+                                                            // TODO: limit to 3.
+                                                            req.restarts += 1;
+                                                            return self.execute_app(app, req);
+                                                        }
+                                                    };
+                                                }
+                                                VarnishErrorState::Restart => {
+                                                    // increase restart counter - req.restarts
+                                                    // TODO: limit to 3.
+                                                    req.restarts += 1;
+                                                    return self.execute_app(app, req);
+                                                }
+                                            };
+                                        }
+                                        VarnishFetchState::Restart => {
+                                            // increase restart counter - req.restarts
+                                            // TODO: limit to 3.
+                                            req.restarts += 1;
+                                            return self.execute_app(app, req);
+                                        }
+                                    }
+                                }
+                                VarnishPassState::Error => {
+                                    let state = self.execute_error(app, req);
+                                    match state {
+                                        VarnishErrorState::Deliver => {
+                                            let state = self.execute_deliver(app, req);
+                                            match state {
+                                                VarnishDeliverState::Deliver => {
+                                                    self.execute_log(app, req)
+                                                }
+                                                VarnishDeliverState::Restart => {
+                                                    // increase restart counter - req.restarts
+                                                    // TODO: limit to 3.
+                                                    req.restarts += 1;
+                                                    return self.execute_app(app, req);
+                                                }
+                                            };
+                                        }
+                                        VarnishErrorState::Restart => {
+                                            // increase restart counter - req.restarts
+                                            // TODO: limit to 3.
+                                            req.restarts += 1;
+                                            return self.execute_app(app, req);
+                                        }
+                                    };
+                                }
+                            };
+                        }
+                        VarnishHitState::Error => {
+                            let state = self.execute_error(app, req);
+                            match state {
+                                VarnishErrorState::Deliver => {
+                                    let state = self.execute_deliver(app, req);
+                                    match state {
+                                        VarnishDeliverState::Deliver => self.execute_log(app, req),
+                                        VarnishDeliverState::Restart => {
+                                            // increase restart counter - req.restarts
+                                            // TODO: limit to 3.
+                                            req.restarts += 1;
+                                            return self.execute_app(app, req);
+                                        }
+                                    };
+                                }
+                                VarnishErrorState::Restart => {
+                                    // increase restart counter - req.restarts
+                                    // TODO: limit to 3.
+                                    req.restarts += 1;
+                                    return self.execute_app(app, req);
+                                }
+                            };
+                        }
+                        VarnishHitState::Restart => {
+                            // increase restart counter - req.restarts
+                            // TODO: limit to 3.
+                            req.restarts += 1;
+                            return self.execute_app(app, req);
+                        }
+                    };
+                } else {
+                    let state = self.execute_miss(app, req);
+                    match state {
+                        VarnishMissState::Fetch => {
+                            // TODO: Start the backend fetch request
+                            let state = self.execute_fetch(app, req);
+                            match state {
+                                VarnishFetchState::Deliver => {
+                                    let state = self.execute_deliver(app, req);
+                                    match state {
+                                        VarnishDeliverState::Deliver => self.execute_log(app, req),
+                                        VarnishDeliverState::Restart => {
+                                            // increase restart counter - req.restarts
+                                            // TODO: limit to 3.
+                                            req.restarts += 1;
+                                            return self.execute_app(app, req);
+                                        }
+                                    };
+                                }
+                                VarnishFetchState::DeliverStale => {
+                                    let state = self.execute_deliver(app, req);
+                                    match state {
+                                        VarnishDeliverState::Deliver => self.execute_log(app, req),
+                                        VarnishDeliverState::Restart => {
+                                            // increase restart counter - req.restarts
+                                            // TODO: limit to 3.
+                                            req.restarts += 1;
+                                            return self.execute_app(app, req);
+                                        }
+                                    };
+                                }
+                                VarnishFetchState::Pass => {
+                                    let state = self.execute_deliver(app, req);
+                                    match state {
+                                        VarnishDeliverState::Deliver => self.execute_log(app, req),
+                                        VarnishDeliverState::Restart => {
+                                            // increase restart counter - req.restarts
+                                            // TODO: limit to 3.
+                                            req.restarts += 1;
+                                            return self.execute_app(app, req);
+                                        }
+                                    };
+                                }
+                                VarnishFetchState::Error => {
+                                    let state = self.execute_error(app, req);
+                                    match state {
+                                        VarnishErrorState::Deliver => {
+                                            let state = self.execute_deliver(app, req);
+                                            match state {
+                                                VarnishDeliverState::Deliver => {
+                                                    self.execute_log(app, req)
+                                                }
+                                                VarnishDeliverState::Restart => {
+                                                    // increase restart counter - req.restarts
+                                                    // TODO: limit to 3.
+                                                    req.restarts += 1;
+                                                    return self.execute_app(app, req);
+                                                }
+                                            };
+                                        }
+                                        VarnishErrorState::Restart => {
+                                            // increase restart counter - req.restarts
+                                            // TODO: limit to 3.
+                                            req.restarts += 1;
+                                            return self.execute_app(app, req);
+                                        }
+                                    };
+                                }
+                                VarnishFetchState::Restart => {
+                                    // increase restart counter - req.restarts
+                                    // TODO: limit to 3.
+                                    req.restarts += 1;
+                                    return self.execute_app(app, req);
+                                }
+                            };
+                        }
+                        VarnishMissState::DeliverStale => {
+                            let state = self.execute_deliver(app, req);
+                            match state {
+                                VarnishDeliverState::Deliver => self.execute_log(app, req),
+                                VarnishDeliverState::Restart => {
+                                    // increase restart counter - req.restarts
+                                    // TODO: limit to 3.
+                                    req.restarts += 1;
+                                    return self.execute_app(app, req);
+                                }
+                            };
+                        }
+                        VarnishMissState::Pass => {
+                            let state = self.execute_pass(app, req);
+                            match state {
+                                VarnishPassState::Pass => {
+                                    // TODO: Start the backend fetch request
+                                    let state = self.execute_fetch(app, req);
+                                    match state {
+                                        VarnishFetchState::Deliver => {
+                                            let state = self.execute_deliver(app, req);
+                                            match state {
+                                                VarnishDeliverState::Deliver => {
+                                                    self.execute_log(app, req)
+                                                }
+                                                VarnishDeliverState::Restart => {
+                                                    // increase restart counter - req.restarts
+                                                    // TODO: limit to 3.
+                                                    req.restarts += 1;
+                                                    return self.execute_app(app, req);
+                                                }
+                                            };
+                                        }
+                                        VarnishFetchState::DeliverStale => {
+                                            let state = self.execute_deliver(app, req);
+                                            match state {
+                                                VarnishDeliverState::Deliver => {
+                                                    self.execute_log(app, req)
+                                                }
+                                                VarnishDeliverState::Restart => {
+                                                    // increase restart counter - req.restarts
+                                                    // TODO: limit to 3.
+                                                    req.restarts += 1;
+                                                    return self.execute_app(app, req);
+                                                }
+                                            };
+                                        }
+                                        VarnishFetchState::Pass => {
+                                            let state = self.execute_deliver(app, req);
+                                            match state {
+                                                VarnishDeliverState::Deliver => {
+                                                    self.execute_log(app, req)
+                                                }
+                                                VarnishDeliverState::Restart => {
+                                                    // increase restart counter - req.restarts
+                                                    // TODO: limit to 3.
+                                                    req.restarts += 1;
+                                                    return self.execute_app(app, req);
+                                                }
+                                            };
+                                        }
+                                        VarnishFetchState::Error => {
+                                            let state = self.execute_error(app, req);
+                                            match state {
+                                                VarnishErrorState::Deliver => {
+                                                    let state = self.execute_deliver(app, req);
+                                                    match state {
+                                                        VarnishDeliverState::Deliver => {
+                                                            self.execute_log(app, req)
+                                                        }
+                                                        VarnishDeliverState::Restart => {
+                                                            // increase restart counter - req.restarts
+                                                            // TODO: limit to 3.
+                                                            req.restarts += 1;
+                                                            return self.execute_app(app, req);
+                                                        }
+                                                    };
+                                                }
+                                                VarnishErrorState::Restart => {
+                                                    // increase restart counter - req.restarts
+                                                    // TODO: limit to 3.
+                                                    req.restarts += 1;
+                                                    return self.execute_app(app, req);
+                                                }
+                                            };
+                                        }
+                                        VarnishFetchState::Restart => {
+                                            // increase restart counter - req.restarts
+                                            // TODO: limit to 3.
+                                            req.restarts += 1;
+                                            return self.execute_app(app, req);
+                                        }
+                                    }
+                                }
+                                VarnishPassState::Error => {
+                                    let state = self.execute_error(app, req);
+                                    match state {
+                                        VarnishErrorState::Deliver => {
+                                            let state = self.execute_deliver(app, req);
+                                            match state {
+                                                VarnishDeliverState::Deliver => {
+                                                    self.execute_log(app, req)
+                                                }
+                                                VarnishDeliverState::Restart => {
+                                                    // increase restart counter - req.restarts
+                                                    // TODO: limit to 3.
+                                                    req.restarts += 1;
+                                                    return self.execute_app(app, req);
+                                                }
+                                            };
+                                        }
+                                        VarnishErrorState::Restart => {
+                                            // increase restart counter - req.restarts
+                                            // TODO: limit to 3.
+                                            req.restarts += 1;
+                                            return self.execute_app(app, req);
+                                        }
+                                    };
+                                }
+                            };
+                        }
+                        VarnishMissState::Error => {
+                            let state = self.execute_error(app, req);
+                            match state {
+                                VarnishErrorState::Deliver => {
+                                    let state = self.execute_deliver(app, req);
+                                    match state {
+                                        VarnishDeliverState::Deliver => self.execute_log(app, req),
+                                        VarnishDeliverState::Restart => {
+                                            // increase restart counter - req.restarts
+                                            // TODO: limit to 3.
+                                            req.restarts += 1;
+                                            return self.execute_app(app, req);
+                                        }
+                                    };
+                                }
+                                VarnishErrorState::Restart => {
+                                    // increase restart counter - req.restarts
+                                    // TODO: limit to 3.
+                                    req.restarts += 1;
+                                    return self.execute_app(app, req);
+                                }
+                            };
+                        }
+                    }
+                }
+            }
+            VarnishRecvState::Pass => {
+                let state = self.execute_pass(app, req);
+                match state {
+                    VarnishPassState::Pass => {
+                        // TODO: Start the backend fetch request
+                        let state = self.execute_fetch(app, req);
+                        match state {
+                            VarnishFetchState::Deliver => {
+                                let state = self.execute_deliver(app, req);
+                                match state {
+                                    VarnishDeliverState::Deliver => self.execute_log(app, req),
+                                    VarnishDeliverState::Restart => {
+                                        // increase restart counter - req.restarts
+                                        // TODO: limit to 3.
+                                        req.restarts += 1;
+                                        return self.execute_app(app, req);
+                                    }
+                                };
+                            }
+                            VarnishFetchState::DeliverStale => {
+                                let state = self.execute_deliver(app, req);
+                                match state {
+                                    VarnishDeliverState::Deliver => self.execute_log(app, req),
+                                    VarnishDeliverState::Restart => {
+                                        // increase restart counter - req.restarts
+                                        // TODO: limit to 3.
+                                        req.restarts += 1;
+                                        return self.execute_app(app, req);
+                                    }
+                                };
+                            }
+                            VarnishFetchState::Pass => {
+                                let state = self.execute_deliver(app, req);
+                                match state {
+                                    VarnishDeliverState::Deliver => self.execute_log(app, req),
+                                    VarnishDeliverState::Restart => {
+                                        // increase restart counter - req.restarts
+                                        // TODO: limit to 3.
+                                        req.restarts += 1;
+                                        return self.execute_app(app, req);
+                                    }
+                                };
+                            }
+                            VarnishFetchState::Error => {
+                                let state = self.execute_error(app, req);
+                                match state {
+                                    VarnishErrorState::Deliver => {
+                                        let state = self.execute_deliver(app, req);
+                                        match state {
+                                            VarnishDeliverState::Deliver => {
+                                                self.execute_log(app, req)
+                                            }
+                                            VarnishDeliverState::Restart => {
+                                                // increase restart counter - req.restarts
+                                                // TODO: limit to 3.
+                                                req.restarts += 1;
+                                                return self.execute_app(app, req);
+                                            }
+                                        };
+                                    }
+                                    VarnishErrorState::Restart => {
+                                        // increase restart counter - req.restarts
+                                        // TODO: limit to 3.
+                                        req.restarts += 1;
+                                        return self.execute_app(app, req);
+                                    }
+                                };
+                            }
+                            VarnishFetchState::Restart => {
+                                // increase restart counter - req.restarts
+                                // TODO: limit to 3.
+                                req.restarts += 1;
+                                return self.execute_app(app, req);
+                            }
+                        }
+                    }
+                    VarnishPassState::Error => {
+                        let state = self.execute_error(app, req);
+                        match state {
+                            VarnishErrorState::Deliver => {
+                                let state = self.execute_deliver(app, req);
+                                match state {
+                                    VarnishDeliverState::Deliver => self.execute_log(app, req),
+                                    VarnishDeliverState::Restart => {
+                                        // increase restart counter - req.restarts
+                                        // TODO: limit to 3.
+                                        req.restarts += 1;
+                                        return self.execute_app(app, req);
+                                    }
+                                };
+                            }
+                            VarnishErrorState::Restart => {
+                                // increase restart counter - req.restarts
+                                // TODO: limit to 3.
+                                req.restarts += 1;
+                                return self.execute_app(app, req);
+                            }
+                        };
+                    }
+                };
+            }
+            VarnishRecvState::Error => {
+                let state = self.execute_error(app, req);
+                match state {
+                    VarnishErrorState::Deliver => {
+                        let state = self.execute_deliver(app, req);
+                        match state {
+                            VarnishDeliverState::Deliver => self.execute_log(app, req),
+                            VarnishDeliverState::Restart => {
+                                // increase restart counter - req.restarts
+                                // TODO: limit to 3.
+                                req.restarts += 1;
+                                return self.execute_app(app, req);
+                            }
+                        };
+                    }
+                    VarnishErrorState::Restart => {
+                        // increase restart counter - req.restarts
+                        // TODO: limit to 3.
+                        req.restarts += 1;
+                        return self.execute_app(app, req);
+                    }
+                };
+            }
+            _ => todo!("unreachable"),
+        };
+
+        // TODO: get resp from app
+        Resp {
+            body_bytes_written: 0,
+            bytes_written: 0,
+            completed: true,
+            header_bytes_written: 0,
+            is_locally_generated: false,
+            proto: "HTTP/1.1".to_string(),
+            response: "OK".to_string(),
+            status: 200,
+        }
+    }
+
+    pub fn execute_hit(&self, app: &App, req: &Req) -> VarnishHitState {
+        VarnishHitState::Deliver
+    }
+    pub fn execute_miss(&self, app: &App, req: &Req) -> VarnishMissState {
+        VarnishMissState::Fetch
+    }
+    pub fn execute_pass(&self, app: &App, req: &Req) -> VarnishPassState {
+        VarnishPassState::Pass
+    }
+    pub fn execute_error(&self, app: &App, req: &Req) -> VarnishErrorState {
+        VarnishErrorState::Deliver
+    }
+    pub fn execute_log(&self, app: &App, req: &Req) -> VarnishLogState {
+        VarnishLogState::Deliver
+    }
+    pub fn execute_hash(&self, app: &App, req: &Req) -> VarnishHashState {
+        VarnishHashState::Hash
+    }
+    pub fn execute_deliver(&self, app: &App, req: &Req) -> VarnishDeliverState {
+        VarnishDeliverState::Deliver
+    }
+    pub fn execute_fetch(&self, app: &App, req: &Req) -> VarnishFetchState {
+        VarnishFetchState::Deliver
+    }
+
+    pub fn execute_recv(&mut self, app: &App, req: &Req) -> VarnishRecvState {
+        let req_sym = Symbol {
+            name: "req".to_string(),
+            line: 0,
+            col: 0,
+            var_type: None,
+        };
+        self.env = Environment::default();
+        self.env.define(req_sym, Type::Req, Some(Value::Req(req.clone())));
+        for stmt in &app.machine.recv.body {
+            let result = self.execute(&stmt).expect("sadasdaasda");
+            if let Some(result) = result {
+                return match result {
+                    VarnishState::Lookup => VarnishRecvState::Lookup,
+                    VarnishState::Pass => VarnishRecvState::Pass,
+                    VarnishState::Error => VarnishRecvState::Error,
+                    VarnishState::Restart => VarnishRecvState::Restart,
+                    _ => todo!("unreachable 1"),
+                }
+            }
+        }
+        VarnishRecvState::Lookup
+    }
+
     pub fn format_backtrace(&self) -> String {
         let lines: Vec<_> = self
             .backtrace
@@ -540,14 +1269,14 @@ impl Interpreter {
         res
     }
 
-    fn execute(&mut self, stmt: &expr::Stmt) -> Result<(), String> {
+    fn execute(&mut self, stmt: &expr::Stmt) -> Result<Option<VarnishState>, String> {
         if self.retval.is_some() {
-            return Ok(());
+            return Ok(None);
         }
 
         match stmt {
             expr::Stmt::Expr(e) => match self.interpret_expr(e) {
-                Ok(_) => Ok(()),
+                Ok(_) => Ok(None),
                 Err(err) => Err(err),
             },
             expr::Stmt::If(cond, if_true, maybe_if_false) => {
@@ -557,13 +1286,13 @@ impl Interpreter {
                 if let Some(if_false) = maybe_if_false {
                     return self.execute(if_false);
                 }
-                Ok(())
+                Ok(None)
             }
             expr::Stmt::Log(e) => match self.interpret_expr(e) {
                 Ok(val) => {
                     println!("{}", val);
                     self.output.push(format!("{}", val));
-                    Ok(())
+                    Ok(None)
                 }
                 Err(err) => Err(err),
             },
@@ -574,18 +1303,18 @@ impl Interpreter {
                     expr_type_to_interpreter_type(sym.var_type.as_ref().unwrap()),
                     None,
                 );
-                Ok(())
+                Ok(None)
             }
             expr::Stmt::Block(stmts) => {
                 for stmt in stmts.iter() {
                     self.execute(stmt)?;
                 }
 
-                Ok(())
+                Ok(None)
             }
             expr::Stmt::Set(identifier, assignment, value) => {
                 self.interpret_set(identifier, assignment, value)?;
-                Ok(())
+                Ok(None)
             }
             expr::Stmt::Return(_, _)
             | expr::Stmt::Esi

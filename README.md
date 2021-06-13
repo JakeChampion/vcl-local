@@ -99,6 +99,8 @@ AST: Program {
 - [ ] regex capture groups - <https://developer.fastly.com/reference/vcl/regex/#capture-groups-and-replacement>
 - [ ] PCRE2 modifiers - <https://developer.fastly.com/reference/vcl/regex/#pattern-modifiers>
 - [ ] error if at end of parsing and at root level there were things other than subroutines, tables and acls
+- [ ] error if subroutine starts with vcl_ and is not one of the ones allowed
+- [ ] error if subroutine is not a vcl_ prefix and multiple definitions exist
 
 ### Interpreter
 
