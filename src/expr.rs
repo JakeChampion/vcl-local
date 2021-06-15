@@ -20,7 +20,7 @@ pub enum Assignment {
     LogicalOr,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
     Literal(Literal),
     Unary(UnaryOp, Box<Expr>),
@@ -33,13 +33,13 @@ pub enum Expr {
     If(Box<Expr>, Box<Expr>, Box<Expr>),
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct SourceLocation {
     pub line: usize,
     pub col: i64,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum LogicalOp {
     Or,
     And,
@@ -262,19 +262,19 @@ pub enum Stmt {
     SyntheticBase64(Expr),
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum UnaryOpTy {
     Bang,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct UnaryOp {
     pub ty: UnaryOpTy,
     pub line: usize,
     pub col: i64,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum BinaryOpTy {
     EqualEqual,
     NotEqual,
@@ -287,14 +287,14 @@ pub enum BinaryOpTy {
     NotMatch,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct BinaryOp {
     pub ty: BinaryOpTy,
     pub line: usize,
     pub col: i64,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Literal {
     Float(f64),
     Integer(i64),
@@ -319,7 +319,14 @@ pub enum Type {
     String,
     Time,
     Director,
-    Req
+    Req,
+    Table,
+    Bereq,
+    Resp,
+    Beresp,
+    Sub,
+    VarnishSate,
+    Function,
 }
 
 #[derive(Debug, Clone, PartialEq)]

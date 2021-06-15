@@ -202,16 +202,22 @@ pub struct Req {
     pub body: String,
     // Total body bytes read from the client generating the request.
     // https://developer.fastly.com/reference/vcl/variables/client-request/req-body-bytes-read/
-    pub body_bytes_read: usize,
+    pub body_bytes_read: Wrapping<i64>,
     // Total bytes read from the client generating the request.
     // https://developer.fastly.com/reference/vcl/variables/client-request/req-bytes-read/
-    pub bytes_read: usize,
+    pub bytes_read: Wrapping<i64>,
     // Apply range handling for responses on pass.
     // https://developer.fastly.com/reference/vcl/variables/client-request/req-enable-range-on-pass/
     pub enable_range_on_pass: bool,
     // Assemble the response from individually cacheable block-aligned file segments.
     // https://developer.fastly.com/reference/vcl/variables/client-request/req-enable-segmented-caching/
     pub enable_segmented_caching: bool,
+    // Whether or not to disable or enable ESI processing during this request. Using set req.esi = false; will disable ESI processing. The default value is true.
+    // https://developer.fastly.com/reference/vcl/variables/esi/req-esi/
+    pub esi: bool,
+    // Level of ESI subrequest. A value of 0 indicates this is the top-level request. A value of 2 would signify an include within an include.
+    // https://developer.fastly.com/reference/vcl/variables/esi/req-esi-level/
+    pub esi_level: Wrapping<i64>,
     // Forces the request to miss whether we have a cached version of the object or not. This differs from passing in that Varnish will still request collapse and will avoid the creation of hit_for_pass objects.
     // https://developer.fastly.com/reference/vcl/variables/client-request/req-hash-always-miss/
     pub hash_always_miss: bool,
@@ -220,10 +226,16 @@ pub struct Req {
     pub hash_ignore_busy: bool,
     // Total header bytes read from the client generating the request.
     // https://developer.fastly.com/reference/vcl/variables/client-request/req-header-bytes-read/
-    pub header_bytes_read: usize,
+    pub header_bytes_read: Wrapping<i64>,
     // Whether VCL is being evaluated for a stale while revalidate request to a backend.
     // https://developer.fastly.com/reference/vcl/variables/client-request/req-is-background-fetch/
     pub is_background_fetch: bool,
+    // Whether VCL is being evaluated within an ESI fragment.
+    // https://developer.fastly.com/reference/vcl/variables/esi/req-is-esi-subreq/
+    pub is_esi_subreq: bool,
+    // Indicates whether the request was made using IPv6 or not.
+    // https://developer.fastly.com/reference/vcl/variables/client-connection/req-is-ipv6/
+    pub is_ipv6: bool,
     // Whether the handled request is a purge request.
     // https://developer.fastly.com/reference/vcl/variables/client-request/req-is-purge/
     pub is_purge: bool,
@@ -243,6 +255,9 @@ pub struct Req {
     // Alias of req.method.
     // https://developer.fastly.com/reference/vcl/variables/client-request/req-request/
     pub request: String,
+    // In an ESI subrequest, contains the URL of the top-level request that ESI processing was enabled on. If the request is not an ESI, req.topurl will be a not set string value.
+    // https://developer.fastly.com/reference/vcl/variables/esi/req-topurl/
+    pub topurl: String,
     // The full path, including query parameters.
     // https://developer.fastly.com/reference/vcl/variables/client-request/req-url/
     pub url: String,
@@ -286,10 +301,10 @@ impl Req {
     async fn from_hyper_req(req: Request<Body>) -> Self {
         let uri = req.uri().to_string();
         let headers = req.headers();
-        let mut header_bytes_read = 0;
+        let mut header_bytes_read = Wrapping(0 as i64);
         for (key, value) in headers.iter() {
-            header_bytes_read += key.to_string().len();
-            header_bytes_read += value.len();
+            header_bytes_read += Wrapping(key.to_string().len() as i64);
+            header_bytes_read += Wrapping(value.len() as i64);
         }
         let method = req.method().to_string();
         let proto = match req.version() {
@@ -303,7 +318,7 @@ impl Req {
         let body = req.into_body();
         let body_as_bytes = hyper::body::to_bytes(body).await.expect("11111213");
         let body = std::str::from_utf8(&body_as_bytes).unwrap().to_string();
-        let body_bytes_read = body_as_bytes.len();
+        let body_bytes_read = Wrapping(body_as_bytes.len() as i64);
         let bytes_read = header_bytes_read + body_bytes_read;
 
         Req {
@@ -312,16 +327,21 @@ impl Req {
             bytes_read,
             enable_range_on_pass: false,
             enable_segmented_caching: false,
+            esi: true,
+            esi_level: Wrapping(0),
             hash_always_miss: false,
             hash_ignore_busy: false,
             header_bytes_read,
             is_background_fetch: false,
+            is_esi_subreq: false,
+            is_ipv6: false,
             is_purge: false,
             method: method.clone(),
             postbody: body,
             proto,
             restarts: 0,
             request: method,
+            topurl: "".to_string(),
             url: uri,
             xid: "1".to_string(),
         }
@@ -564,7 +584,7 @@ fn combine_subs(subroutines: &[expr::SubDecl], name: &str) -> expr::SubDecl {
             name: name.to_string(),
             line: 0,
             col: 0,
-            var_type: None,
+            var_type: Some(expr::Type::Sub),
         },
         body: stmts,
     }
@@ -666,12 +686,6 @@ impl Interpreter {
             eprintln!("server error: {}", err);
         }
 
-        // for _stmt in &program.body {
-        //     // println!("stmt: {:?}", stmt);
-        //     //
-        //     //
-        //     // self.execute(stmt)?
-        // }
         Ok(())
     }
 
@@ -1235,10 +1249,11 @@ impl Interpreter {
             name: "req".to_string(),
             line: 0,
             col: 0,
-            var_type: None,
+            var_type: Some(expr::Type::Req),
         };
         self.env = Environment::default();
-        self.env.define(req_sym, Type::Req, Some(Value::Req(req.clone())));
+        self.env
+            .define(req_sym, Type::Req, Some(Value::Req(req.clone())));
         for stmt in &app.machine.recv.body {
             let result = self.execute(&stmt).expect("sadasdaasda");
             if let Some(result) = result {
@@ -1248,7 +1263,7 @@ impl Interpreter {
                     VarnishState::Error => VarnishRecvState::Error,
                     VarnishState::Restart => VarnishRecvState::Restart,
                     _ => todo!("unreachable 1"),
-                }
+                };
             }
         }
         VarnishRecvState::Lookup
@@ -1261,12 +1276,6 @@ impl Interpreter {
             .map(|(_, funname)| format!("[line ??] in {}", funname))
             .collect();
         format!("Backtrace (most recent call last):\n\n{}", lines.join("\n"))
-    }
-
-    fn alloc_id(&mut self) -> u64 {
-        let res = self.counter;
-        self.counter += 1;
-        res
     }
 
     fn execute(&mut self, stmt: &expr::Stmt) -> Result<Option<VarnishState>, String> {
@@ -1385,7 +1394,57 @@ impl Interpreter {
             expr::Expr::Unary(op, e) => self.interpret_unary(*op, e),
             expr::Expr::Binary(lhs, op, rhs) => self.interpret_binary(lhs, *op, rhs),
             expr::Expr::Call(callee, loc, args) => self.call(callee, loc, args),
-            expr::Expr::Get(lhs, attr) => todo!(), //self.getattr(lhs, &attr.name),
+            expr::Expr::Get(lhs, attr) => {
+                //self.getattr(lhs, &attr.name)
+                // println!("lhs: {:?}", lhs);
+                // println!("attr: {:?}", attr);
+                if let expr::Expr::Variable(lhs) = lhs.as_ref() {
+                    let v = self.env.get(&lhs).expect("grr");
+                    match v {
+                        Value::Integer(_) => todo!(),
+                        Value::Float(_) => todo!(),
+                        Value::String(_) => todo!(),
+                        Value::Bool(_) => todo!(),
+                        Value::Function(_) => todo!(),
+                        Value::Backend(_) => todo!(),
+                        Value::Nil => todo!(),
+                        Value::Req(req) => {
+                            // TODO: All the other req properties such as
+                            // body.base64
+                            // http.*
+                            // url.basename
+                            // url.dirname
+                            // url.ext
+                            // url.path
+                            // url.qs
+                            match attr.name.as_str() {
+                                "enable_range_on_pass" => Ok(Value::Bool(req.enable_range_on_pass)),
+                                "enable_segmented_caching" => {
+                                    Ok(Value::Bool(req.enable_segmented_caching))
+                                }
+                                "esi" => Ok(Value::Bool(req.esi)),
+                                "esi_level" => Ok(Value::Integer(req.esi_level)),
+                                "hash_always_miss" => Ok(Value::Bool(req.hash_always_miss)),
+                                "hash_ignore_busy" => Ok(Value::Bool(req.hash_ignore_busy)),
+                                "is_ipv6" => Ok(Value::Bool(req.is_ipv6)),
+                                "is_purge" => Ok(Value::Bool(req.is_purge)),
+                                "is_background_fetch" => Ok(Value::Bool(req.is_background_fetch)),
+                                "body" => Ok(Value::String(req.body.clone())),
+                                "postbody" => Ok(Value::String(req.body.clone())),
+                                "header_bytes_read" => Ok(Value::Integer(req.header_bytes_read)),
+                                "method" => Ok(Value::String(req.method.clone())),
+                                "proto" => Ok(Value::String(req.proto.clone())),
+                                "request" => Ok(Value::String(req.request.clone())),
+                                "url" => Ok(Value::String(req.url.clone())),
+                                "xid" => Ok(Value::String(req.xid.clone())),
+                                _ => todo!(),
+                            }
+                        }
+                    }
+                } else {
+                    todo!()
+                }
+            }
             expr::Expr::Grouping(e) => self.interpret_expr(e),
             expr::Expr::Variable(sym) => match self.lookup(sym) {
                 Ok(val) => Ok(val.clone()),

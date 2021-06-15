@@ -105,9 +105,11 @@ AST: Program {
 ### Interpreter
 
 - [x] The integer variants of the +=, -=, and *= operators wrap around as if they were unsigned 64-bit integers.
+- [ ] log
 - [ ] FLOAT arithmetic has special cases for operands which are NaN: Arithmetic operators evaluate to NaN when either operand is NaN.
 - [ ] fastly.error = "EDOM" when Domain error. This occurs for a mathematical function which is not defined for a particular value; formally, that value is not considered part of its input domain. For example, division by zero, or var.x %= 5; where var.x is a floating point infinity.
-- [ ] subroutine
+- [ ] subroutines
+  - [ ] vcl_recv
 - [x] backend
 - [ ] director
 - [ ] call
@@ -115,3 +117,4 @@ AST: Program {
 - [ ] stdlib
 - [ ] regex capture groups - <https://developer.fastly.com/reference/vcl/regex/#capture-groups-and-replacement>
 - [ ] Predefined variables - <https://developer.fastly.com/reference/vcl/variables/#predefined-variables>
+- [ ] Cannot `call` a vcl_ prefixed subroutine

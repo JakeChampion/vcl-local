@@ -702,7 +702,7 @@ impl Parser {
             name: String::from_utf8(name_tok.lexeme).unwrap(),
             line: name_tok.line,
             col: name_tok.col,
-            var_type: None,
+            var_type: Some(expr::Type::Table),
         };
 
         self.consume(
@@ -774,7 +774,7 @@ impl Parser {
             name: String::from_utf8(name_tok.lexeme).unwrap(),
             line: name_tok.line,
             col: name_tok.col,
-            var_type: None,
+            var_type: Some(expr::Type::Sub),
         };
 
         self.consume(
@@ -1123,7 +1123,7 @@ impl Parser {
                 name,
                 line: token.line,
                 col: token.col,
-                var_type: None,
+                var_type: Some(expr::Type::VarnishSate),
             })
         };
 
@@ -1536,7 +1536,7 @@ impl Parser {
                 name: "subfield".to_string(),
                 line: self.previous().line,
                 col: self.previous().col,
-                var_type: None,
+                var_type: Some(expr::Type::Function),
             })),
             expr::SourceLocation {
                 line: self.previous().line,
