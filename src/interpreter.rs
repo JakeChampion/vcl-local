@@ -1,21 +1,19 @@
+use hyper::http::Uri;
 use hyper::{
     service::{make_service_fn, service_fn},
-    Body, Client, Error, Method, Request, Response, Server, Version,
+    Body, Client, Error, Request, Response, Server, Version,
 };
 use std::u16;
 use std::{collections::HashMap, sync::Arc};
 use tokio::time::{interval, Duration};
 use tokio::{sync::RwLock, time::timeout};
-use hyper::http::Uri;
 
 use std::num::Wrapping;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use crate::expr::{self, Program, Stmt, SubDecl, Symbol};
-use crate::expr::{DurationUnit, ABDIST};
+use crate::expr::DurationUnit;
+use crate::expr::{self, Program, SubDecl, Symbol};
 use std::fmt;
-
-static INIT: &str = "init";
 
 trait Callable {
     fn arity(&self, interpreter: &Interpreter) -> u8;
@@ -65,7 +63,7 @@ pub enum Value {
     Function(Function),
     Backend(Backend),
     Nil,
-    Req(Req),
+    Req(Box<Req>),
     RTime(Duration),
 }
 
@@ -308,7 +306,7 @@ impl Req {
         if path == "/" {
             "".to_string()
         } else {
-            let mut parts: Vec<&str> =path.split('/').collect();
+            let mut parts: Vec<&str> = path.split('/').collect();
             parts.pop().unwrap().to_string()
         }
     }
@@ -318,12 +316,12 @@ impl Req {
     fn url_ext(&self) -> String {
         let uri = self.url.parse::<Uri>().unwrap();
         let path = uri.path();
-        let mut parts: Vec<&str> =path.split('.').collect();
+        let mut parts: Vec<&str> = path.split('.').collect();
         parts.pop().unwrap().to_string()
     }
     // The full path, without any query parameters.
     // This variable is updated any time req.url is set.
-    fn url_path(&self)-> String {
+    fn url_path(&self) -> String {
         let uri = self.url.parse::<Uri>().unwrap();
         uri.path().to_string()
     }
@@ -354,11 +352,11 @@ impl Req {
             }
         }
     }
-    
+
     async fn from_hyper_req(req: Request<Body>) -> Self {
         let uri = req.uri().to_string();
         let headers = req.headers();
-        let mut header_bytes_read = Wrapping(0 as i64);
+        let mut header_bytes_read = Wrapping(0_i64);
         for (key, value) in headers.iter() {
             header_bytes_read += Wrapping(key.to_string().len() as i64);
             header_bytes_read += Wrapping(value.len() as i64);
@@ -378,8 +376,8 @@ impl Req {
         let body_bytes_read = Wrapping(body_as_bytes.len() as i64);
         let bytes_read = header_bytes_read + body_bytes_read;
 
-        Req {
-            body: body.clone(),
+        Self {
+            body,
             body_bytes_read,
             bytes_read,
             enable_range_on_pass: false,
@@ -395,8 +393,11 @@ impl Req {
             is_ipv6: false,
             is_purge: false,
             is_ssl: false,
-            max_stale_if_error: interpret_duration(9223372036.854, &DurationUnit::Seconds),
-            max_stale_while_revalidate: interpret_duration(9223372036.854, &DurationUnit::Seconds),
+            max_stale_if_error: interpret_duration(9_223_372_036.854, &DurationUnit::Seconds),
+            max_stale_while_revalidate: interpret_duration(
+                9_223_372_036.854,
+                &DurationUnit::Seconds,
+            ),
             method: method.clone(),
             proto,
             protocol: "http".to_string(),
@@ -692,7 +693,8 @@ impl Interpreter {
         let error = combine_subs(&subroutines, "vcl_error");
         let deliver = combine_subs(&subroutines, "vcl_deliver");
         let log = combine_subs(&subroutines, "vcl_log");
-        let custom_subs: Vec<expr::SubDecl> = subroutines
+        // TODO
+        let _custom_subs: Vec<expr::SubDecl> = subroutines
             .iter()
             .filter_map(|s| {
                 if s.name.name.starts_with("vcl_") {
@@ -723,11 +725,11 @@ impl Interpreter {
         let make_svc = make_service_fn(move |_| {
             let app = app.clone();
             let s = self.clone();
-            let program = program.clone();
+            // let program = program.clone();
             async move {
                 Ok::<_, Error>(service_fn(move |req: Request<Body>| {
                     let app = app.clone();
-                    let program = program.clone();
+                    // let program = program.clone();
                     let mut s = s.clone();
                     async move {
                         let mut vcl_req = Req::from_hyper_req(req).await;
@@ -1281,28 +1283,28 @@ impl Interpreter {
         }
     }
 
-    pub fn execute_hit(&self, app: &App, req: &Req) -> VarnishHitState {
+    pub fn execute_hit(&self, _app: &App, _req: &Req) -> VarnishHitState {
         VarnishHitState::Deliver
     }
-    pub fn execute_miss(&self, app: &App, req: &Req) -> VarnishMissState {
+    pub fn execute_miss(&self, _app: &App, _req: &Req) -> VarnishMissState {
         VarnishMissState::Fetch
     }
-    pub fn execute_pass(&self, app: &App, req: &Req) -> VarnishPassState {
+    pub fn execute_pass(&self, _app: &App, _req: &Req) -> VarnishPassState {
         VarnishPassState::Pass
     }
-    pub fn execute_error(&self, app: &App, req: &Req) -> VarnishErrorState {
+    pub fn execute_error(&self, _app: &App, _req: &Req) -> VarnishErrorState {
         VarnishErrorState::Deliver
     }
-    pub fn execute_log(&self, app: &App, req: &Req) -> VarnishLogState {
+    pub fn execute_log(&self, _app: &App, _req: &Req) -> VarnishLogState {
         VarnishLogState::Deliver
     }
-    pub fn execute_hash(&self, app: &App, req: &Req) -> VarnishHashState {
+    pub fn execute_hash(&self, _app: &App, _req: &Req) -> VarnishHashState {
         VarnishHashState::Hash
     }
-    pub fn execute_deliver(&self, app: &App, req: &Req) -> VarnishDeliverState {
+    pub fn execute_deliver(&self, _app: &App, _req: &Req) -> VarnishDeliverState {
         VarnishDeliverState::Deliver
     }
-    pub fn execute_fetch(&self, app: &App, req: &Req) -> VarnishFetchState {
+    pub fn execute_fetch(&self, _app: &App, _req: &Req) -> VarnishFetchState {
         VarnishFetchState::Deliver
     }
 
@@ -1315,9 +1317,9 @@ impl Interpreter {
         };
         self.env = Environment::default();
         self.env
-            .define(req_sym, Type::Req, Some(Value::Req(req.clone())));
+            .define(req_sym, Type::Req, Some(Value::Req(Box::new(req.clone()))));
         for stmt in &app.machine.recv.body {
-            let result = self.execute(&stmt).expect("sadasdaasda");
+            let result = self.execute(stmt).expect("sadasdaasda");
             if let Some(result) = result {
                 return match result {
                     VarnishState::Lookup => VarnishRecvState::Lookup,
@@ -1458,9 +1460,6 @@ impl Interpreter {
             expr::Expr::Binary(lhs, op, rhs) => self.interpret_binary(lhs, *op, rhs),
             expr::Expr::Call(callee, loc, args) => self.call(callee, loc, args),
             expr::Expr::Get(lhs, attr) => {
-                //self.getattr(lhs, &attr.name)
-                // println!("lhs: {:?}", lhs);
-                // println!("attr: {:?}", attr);
                 if let expr::Expr::Variable(lhs) = lhs.as_ref() {
                     let v = self.env.get(&lhs).expect("grr");
                     match v {
@@ -1472,72 +1471,7 @@ impl Interpreter {
                         Value::Function(_) => todo!(),
                         Value::Backend(_) => todo!(),
                         Value::Nil => todo!(),
-                        Value::Req(req) => {
-                            // TODO: All the other req properties such as
-                            // backend
-                            // https://developer.fastly.com/reference/vcl/variables/miscellaneous/req-backend-ip/
-                            // backend.ip
-                            // backend.name
-                            // https://developer.fastly.com/reference/vcl/variables/miscellaneous/req-backend-port/
-                            // backend.port
-                            // http.*
-                            match attr.name.as_str() {
-                                "body" => Ok(Value::String(req.body.clone())),
-                                "body.base64" => Ok(Value::String(req.body_base64())),
-                                "body_bytes_read" => Ok(Value::Integer(req.body_bytes_read.clone())),
-                                "bytes_read" => Ok(Value::Integer(req.bytes_read)),
-                                "enable_range_on_pass" => Ok(Value::Bool(req.enable_range_on_pass)),
-                                "enable_segmented_caching" => {
-                                    Ok(Value::Bool(req.enable_segmented_caching))
-                                }
-                                "esi" => Ok(Value::Bool(req.esi)),
-                                "esi_level" => Ok(Value::Integer(req.esi_level)),
-                                // https://developer.fastly.com/reference/vcl/variables/server/req-grace/
-                                "grace" => Ok(Value::RTime(req.max_stale_if_error)),
-                                "hash_always_miss" => Ok(Value::Bool(req.hash_always_miss)),
-                                "hash_ignore_busy" => Ok(Value::Bool(req.hash_ignore_busy)),
-                                "header_bytes_read" => Ok(Value::Integer(req.header_bytes_read)),
-                                "is_background_fetch" => Ok(Value::Bool(req.is_background_fetch)),
-                                "is_clustering" => Ok(Value::Bool(req.is_clustering)),
-                                "is_esi_subreq" => Ok(Value::Bool(req.is_esi_subreq)),
-                                "is_ipv6" => Ok(Value::Bool(req.is_ipv6)),
-                                "is_purge" => Ok(Value::Bool(req.is_purge)),
-                                "is_ssl" => Ok(Value::Bool(req.is_ssl)),
-                                "max_stale_if_error" => Ok(Value::RTime(req.max_stale_if_error)),
-                                "max_stale_while_revalidate" => Ok(Value::RTime(req.max_stale_while_revalidate)),
-                                "method" => Ok(Value::String(req.method.clone())),
-                                // The variable req.postbody is an alias for req.body.
-                                // https://developer.fastly.com/reference/vcl/variables/client-request/req-postbody/
-                                "postbody" => Ok(Value::String(req.body.clone())),
-                                "proto" => Ok(Value::String(req.proto.clone())),
-                                "protocol" => Ok(Value::String(req.protocol.clone())),
-                                // Alias of req.method.
-                                // https://developer.fastly.com/reference/vcl/variables/client-request/req-request/
-                                "request" => Ok(Value::String(req.method.clone())),
-                                "restarts" => Ok(Value::Integer(Wrapping(req.restarts as i64))),
-                                // Fastly service ID.
-                                // https://developer.fastly.com/reference/vcl/variables/miscellaneous/req-service-id/
-                                "service_id" => Ok(Value::String("7iO2GdsfBkRxWfssgoM1xI".to_string())),
-                                "topurl" => Ok(Value::String(req.topurl.clone())),
-                                "url" => Ok(Value::String(req.url.clone())),
-                                "url.basename" => Ok(Value::String(req.url_basename())),
-                                "url.dirname" => Ok(Value::String(req.url_dirname())),
-                                "url.ext" => Ok(Value::String(req.url_ext())),
-                                "url.path" => Ok(Value::String(req.url_path())),
-                                "url.qs" => Ok(Value::String(req.url_qs())),
-                                // https://developer.fastly.com/reference/vcl/variables/miscellaneous/req-vcl/
-                                "vcl" => Ok(Value::String("7iO2GdsfBkRxWfssgoM1xI.1_0-51269ab2e4ef1da370a2d6e0d35d7b6e".to_string())),
-                                // https://developer.fastly.com/reference/vcl/variables/miscellaneous/req-vcl-generation/
-                                "vcl.generation" => Ok(Value::Integer(Wrapping(1))),
-                                // https://developer.fastly.com/reference/vcl/variables/miscellaneous/req-vcl-md5/
-                                // TODO: Maybe actually md5 the vcl?
-                                "vcl.md5" => Ok(Value::String("51269ab2e4ef1da370a2d6e0d35d7b6e".to_string())),
-                                // https://developer.fastly.com/reference/vcl/variables/miscellaneous/req-vcl-version/
-                                "vcl.version" => Ok(Value::Integer(Wrapping(1))),
-                                "xid" => Ok(Value::String(req.xid.clone())),
-                                _ => todo!(),
-                            }
-                        }
+                        Value::Req(req) => Self::get_req_attr(req, attr),
                     }
                 } else {
                     todo!()
@@ -1567,6 +1501,72 @@ impl Interpreter {
             expr::Expr::If(_, _, _) => {
                 todo!()
             }
+        }
+    }
+
+    fn get_req_attr(req: &Req, attr: &Symbol) -> Result<Value, String> {
+        // TODO: All the other req properties such as
+        // backend
+        // https://developer.fastly.com/reference/vcl/variables/miscellaneous/req-backend-ip/
+        // backend.ip
+        // backend.name
+        // https://developer.fastly.com/reference/vcl/variables/miscellaneous/req-backend-port/
+        // backend.port
+        // http.*
+        match attr.name.as_str() {
+            // The variable req.postbody is an alias for req.body.
+            // https://developer.fastly.com/reference/vcl/variables/client-request/req-postbody/
+            "body" | "postbody" => Ok(Value::String(req.body.clone())),
+            "body.base64" => Ok(Value::String(req.body_base64())),
+            "body_bytes_read" => Ok(Value::Integer(req.body_bytes_read)),
+            "bytes_read" => Ok(Value::Integer(req.bytes_read)),
+            "enable_range_on_pass" => Ok(Value::Bool(req.enable_range_on_pass)),
+            "enable_segmented_caching" => Ok(Value::Bool(req.enable_segmented_caching)),
+            "esi" => Ok(Value::Bool(req.esi)),
+            "esi_level" => Ok(Value::Integer(req.esi_level)),
+            "hash_always_miss" => Ok(Value::Bool(req.hash_always_miss)),
+            "hash_ignore_busy" => Ok(Value::Bool(req.hash_ignore_busy)),
+            "header_bytes_read" => Ok(Value::Integer(req.header_bytes_read)),
+            "is_background_fetch" => Ok(Value::Bool(req.is_background_fetch)),
+            "is_clustering" => Ok(Value::Bool(req.is_clustering)),
+            "is_esi_subreq" => Ok(Value::Bool(req.is_esi_subreq)),
+            "is_ipv6" => Ok(Value::Bool(req.is_ipv6)),
+            "is_purge" => Ok(Value::Bool(req.is_purge)),
+            "is_ssl" => Ok(Value::Bool(req.is_ssl)),
+            // https://developer.fastly.com/reference/vcl/variables/server/req-grace/
+            "grace" | "max_stale_if_error" => Ok(Value::RTime(req.max_stale_if_error)),
+            "max_stale_while_revalidate" => Ok(Value::RTime(req.max_stale_while_revalidate)),
+            // Alias of req.method.
+            // https://developer.fastly.com/reference/vcl/variables/client-request/req-request/
+            "method" | "request" => Ok(Value::String(req.method.clone())),
+            "proto" => Ok(Value::String(req.proto.clone())),
+            "protocol" => Ok(Value::String(req.protocol.clone())),
+            "restarts" => Ok(Value::Integer(Wrapping(i64::from(req.restarts)))),
+            // Fastly service ID.
+            // https://developer.fastly.com/reference/vcl/variables/miscellaneous/req-service-id/
+            "service_id" => Ok(Value::String("7iO2GdsfBkRxWfssgoM1xI".to_string())),
+            "topurl" => Ok(Value::String(req.topurl.clone())),
+            "url" => Ok(Value::String(req.url.clone())),
+            "url.basename" => Ok(Value::String(req.url_basename())),
+            "url.dirname" => Ok(Value::String(req.url_dirname())),
+            "url.ext" => Ok(Value::String(req.url_ext())),
+            "url.path" => Ok(Value::String(req.url_path())),
+            "url.qs" => Ok(Value::String(req.url_qs())),
+            // https://developer.fastly.com/reference/vcl/variables/miscellaneous/req-vcl/
+            "vcl" => Ok(Value::String(
+                "7iO2GdsfBkRxWfssgoM1xI.1_0-51269ab2e4ef1da370a2d6e0d35d7b6e".to_string(),
+            )),
+            // https://developer.fastly.com/reference/vcl/variables/miscellaneous/req-vcl-generation/
+            "vcl.generation" => Ok(Value::Integer(Wrapping(2))),
+            // https://developer.fastly.com/reference/vcl/variables/miscellaneous/req-vcl-md5/
+            // TODO: Maybe actually md5 the vcl?
+            "vcl.md5" => Ok(Value::String(
+                "51269ab2e4ef1da370a2d6e0d35d7b6e".to_string(),
+            )),
+            // https://developer.fastly.com/reference/vcl/variables/miscellaneous/req-vcl-version/
+            "vcl.version" => Ok(Value::Integer(Wrapping(1))),
+            "xid" => Ok(Value::String(req.xid.clone())),
+            _ => todo!(),
         }
     }
 
@@ -2125,7 +2125,7 @@ impl Interpreter {
         }
     }
 
-    fn interpret_backend(&mut self, backend: &Box<expr::Backend>) {
+    fn interpret_backend(&mut self, backend: &expr::Backend) {
         let lock: Arc<RwLock<bool>> = Arc::new(RwLock::new(true));
         self.health.insert(backend.clone().name.name, lock.clone());
         self.globals.define(
@@ -2136,7 +2136,7 @@ impl Interpreter {
                 name: backend.clone().name.name,
             })),
         );
-        let _handle = tokio::spawn(probe(*backend.clone(), lock));
+        let _handle = tokio::spawn(probe(backend.clone(), lock));
     }
 }
 

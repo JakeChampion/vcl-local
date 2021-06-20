@@ -1,7 +1,10 @@
 use hyper::Method;
 
-use crate::{expr::{self, Probe, Program, Scheme}, scanner::Literal};
 use crate::scanner;
+use crate::{
+    expr::{self, Probe, Program, Scheme},
+    scanner::Literal,
+};
 
 use std::{fmt, str::FromStr};
 
@@ -178,15 +181,37 @@ pub fn parse(tokens: Vec<scanner::Token>) -> Result<Program, Error> {
     match stmts_or_err {
         Ok(stmts_or_err) => {
             if p.is_at_end() {
-                Ok(Program {
-                    body: stmts_or_err
-                })
+                Ok(Program { body: stmts_or_err })
             } else {
                 let tok = &p.tokens[p.current];
                 Err(Error::UnexpectedToken(tok.clone()))
             }
         }
         Err(err) => Err(err),
+    }
+}
+
+fn assignment(token: &scanner::Token) -> expr::Assignment {
+    match token.ty {
+        scanner::TokenType::Equal => expr::Assignment::Assign,
+        scanner::TokenType::Addition => expr::Assignment::Addition,
+        scanner::TokenType::Subtraction => expr::Assignment::Subtraction,
+        scanner::TokenType::Multiplication => expr::Assignment::Multiplication,
+        scanner::TokenType::Division => expr::Assignment::Division,
+        scanner::TokenType::Modulus => expr::Assignment::Modulus,
+        scanner::TokenType::BitwiseOr => expr::Assignment::BitwiseOr,
+        scanner::TokenType::BitwiseAnd => expr::Assignment::BitwiseAnd,
+        scanner::TokenType::BitwiseXor => expr::Assignment::BitwiseXor,
+        scanner::TokenType::LeftShift => expr::Assignment::LeftShift,
+        scanner::TokenType::RightShift => expr::Assignment::RightShift,
+        scanner::TokenType::LeftRotate => expr::Assignment::LeftRotate,
+        scanner::TokenType::RightRotate => expr::Assignment::RightRotate,
+        scanner::TokenType::LogicalAnd => expr::Assignment::LogicalAnd,
+        scanner::TokenType::LogicalOr => expr::Assignment::LogicalOr,
+        _ => unreachable!(
+            "Reached a token in assignment that should not be reachable: {:?}",
+            token.ty
+        ),
     }
 }
 
@@ -203,29 +228,32 @@ impl Parser {
     }
 
     fn declaration(&mut self) -> Result<expr::ABDIST, Error> {
-        if self.matches(scanner::TokenType::Sub) {
+        if self.matches(scanner::TokenType::Sub).is_some() {
             return Ok(expr::ABDIST::SubDecl(self.sub_decl(&SubKind::Function)?));
         }
 
-        if self.matches(scanner::TokenType::Acl) {
+        if self.matches(scanner::TokenType::Acl).is_some() {
             // TODO: finish
             // return Ok(expr::Stmt::Acl(self.acl_decl()?));
         }
 
-        if self.matches(scanner::TokenType::Backend) {
+        if self.matches(scanner::TokenType::Backend).is_some() {
             return Ok(expr::ABDIST::Backend(Box::new(self.backend_decl()?)));
         }
 
-        if self.matches(scanner::TokenType::Director) {
+        if self.matches(scanner::TokenType::Director).is_some() {
             return Ok(expr::ABDIST::Director(Box::new(self.director_decl()?)));
         }
-        
-        if self.matches(scanner::TokenType::Table) {
+
+        if self.matches(scanner::TokenType::Table).is_some() {
             return Ok(expr::ABDIST::Table(self.table_decl()?));
         }
 
         // self.statement()
-        panic!("No, you need to be in a declaration. Found: {:?}", self.peek().ty)
+        panic!(
+            "No, you need to be in a declaration. Found: {:?}",
+            self.peek().ty
+        )
     }
 
     fn declare_statement(&mut self) -> Result<expr::Stmt, Error> {
@@ -339,7 +367,7 @@ impl Parser {
         let mut backends: Vec<expr::DirectorBackend> = Vec::new();
 
         while !self.check(scanner::TokenType::RightBrace) && !self.is_at_end() {
-            if self.matches(scanner::TokenType::Dot) {
+            if self.matches(scanner::TokenType::Dot).is_some() {
                 let token = self
                     .consume(
                         scanner::TokenType::Identifier,
@@ -387,7 +415,7 @@ impl Parser {
                     scanner::TokenType::Semicolon,
                     "Expected ; after director property value",
                 )?;
-            } else if self.matches(scanner::TokenType::LeftBrace) {
+            } else if self.matches(scanner::TokenType::LeftBrace).is_some() {
                 let backend = self.director_backend()?;
                 backends.push(backend);
                 self.consume(
@@ -601,7 +629,7 @@ impl Parser {
             let method = a.next().unwrap();
             let method = Method::from_str(method).unwrap();
             let path = a.next().unwrap();
-            let scheme:Scheme = a.next().unwrap().into();
+            let scheme: Scheme = a.next().unwrap().into();
             let mut headers = vec![];
             while !self.check(scanner::TokenType::Semicolon) && !self.is_at_end() {
                 let header_token = self.consume(scanner::TokenType::String, "1563378905")?;
@@ -618,7 +646,7 @@ impl Parser {
                 method,
                 path: path.to_string(),
                 scheme,
-                headers
+                headers,
             })
         } else {
             panic!("123lk312");
@@ -792,67 +820,67 @@ impl Parser {
     }
 
     fn statement(&mut self) -> Result<expr::Stmt, Error> {
-        if self.matches(scanner::TokenType::Add) {
+        if self.matches(scanner::TokenType::Add).is_some() {
             return self.add_statement();
         }
 
-        if self.matches(scanner::TokenType::Call) {
+        if self.matches(scanner::TokenType::Call).is_some() {
             return self.call_statement();
         }
 
-        if self.matches(scanner::TokenType::Declare) {
+        if self.matches(scanner::TokenType::Declare).is_some() {
             return self.declare_statement();
         }
-        
-        if self.matches(scanner::TokenType::Error) {
+
+        if self.matches(scanner::TokenType::Error).is_some() {
             return self.error_statement();
         }
 
-        if self.matches(scanner::TokenType::Esi) {
+        if self.matches(scanner::TokenType::Esi).is_some() {
             return self.esi_statement();
         }
 
-        if self.matches(scanner::TokenType::If) {
+        if self.matches(scanner::TokenType::If).is_some() {
             return self.if_statement();
         }
 
-        if self.matches(scanner::TokenType::Include) {
+        if self.matches(scanner::TokenType::Include).is_some() {
             return self.include_statement();
         }
 
-        if self.matches(scanner::TokenType::Log) {
+        if self.matches(scanner::TokenType::Log).is_some() {
             return self.log_statement();
         }
 
-        if self.matches(scanner::TokenType::Remove) {
+        if self.matches(scanner::TokenType::Remove).is_some() {
             return self.unset_statement();
         }
-        
-        if self.matches(scanner::TokenType::Restart) {
+
+        if self.matches(scanner::TokenType::Restart).is_some() {
             return self.restart_statement();
         }
-        
-        if self.matches(scanner::TokenType::Return) {
+
+        if self.matches(scanner::TokenType::Return).is_some() {
             return self.return_statement();
         }
 
-        if self.matches(scanner::TokenType::Set) {
+        if self.matches(scanner::TokenType::Set).is_some() {
             return self.set_statement();
         }
 
-        if self.matches(scanner::TokenType::Synthetic) {
+        if self.matches(scanner::TokenType::Synthetic).is_some() {
             return self.synthetic_statement();
         }
 
-        if self.matches(scanner::TokenType::SyntheticBase64) {
+        if self.matches(scanner::TokenType::SyntheticBase64).is_some() {
             return self.synthetic_base64_statement();
         }
 
-        if self.matches(scanner::TokenType::Unset) {
+        if self.matches(scanner::TokenType::Unset).is_some() {
             return self.unset_statement();
         }
 
-        if self.matches(scanner::TokenType::LeftBrace) {
+        if self.matches(scanner::TokenType::LeftBrace).is_some() {
             return Ok(expr::Stmt::Block(self.block()?));
         }
 
@@ -860,10 +888,12 @@ impl Parser {
     }
 
     fn call_statement(&mut self) -> Result<expr::Stmt, Error> {
-        let identifier = self.consume(
-            scanner::TokenType::Identifier,
-            "Expected identifier after call statement.",
-        )?.clone();
+        let identifier = self
+            .consume(
+                scanner::TokenType::Identifier,
+                "Expected identifier after call statement.",
+            )?
+            .clone();
         self.consume(
             scanner::TokenType::Semicolon,
             "Expected ; after call statement",
@@ -887,16 +917,20 @@ impl Parser {
     }
 
     fn include_statement(&mut self) -> Result<expr::Stmt, Error> {
-        let filename = self.consume(
-            scanner::TokenType::String,
-            "Expected string after include statement.",
-        )?.clone();
+        let filename = self
+            .consume(
+                scanner::TokenType::String,
+                "Expected string after include statement.",
+            )?
+            .clone();
         self.consume(
             scanner::TokenType::Semicolon,
             "Expected ; after call statement",
         )?;
 
-        Ok(expr::Stmt::Include(expr::Literal::String(String::from_utf8(filename.lexeme).unwrap())))
+        Ok(expr::Stmt::Include(expr::Literal::String(
+            String::from_utf8(filename.lexeme).unwrap(),
+        )))
     }
 
     fn add_statement(&mut self) -> Result<expr::Stmt, Error> {
@@ -946,9 +980,9 @@ impl Parser {
         let mut prop: Vec<String> = vec![];
         let mut line: usize = 0;
         let mut col: i64 = 0;
-        
+
         loop {
-            if self.matches(scanner::TokenType::Dot) {
+            if self.matches(scanner::TokenType::Dot).is_some() {
                 let name_token = self.peek().clone();
                 let name_tok = match name_token.ty {
                     scanner::TokenType::Integer | scanner::TokenType::Identifier => name_token,
@@ -981,7 +1015,7 @@ impl Parser {
                 },
             );
         }
-        if self.match_one_of(
+        if let Some(token) = self.match_one_of(
             vec![
                 scanner::TokenType::Equal,
                 scanner::TokenType::Subtraction,
@@ -1001,28 +1035,7 @@ impl Parser {
             ]
             .as_ref(),
         ) {
-            let token = self.previous().clone();
-            let assignment_type = match token.ty {
-                scanner::TokenType::Equal => expr::Assignment::Assign,
-                scanner::TokenType::Addition => expr::Assignment::Addition,
-                scanner::TokenType::Subtraction => expr::Assignment::Subtraction,
-                scanner::TokenType::Multiplication => expr::Assignment::Multiplication,
-                scanner::TokenType::Division => expr::Assignment::Division,
-                scanner::TokenType::Modulus => expr::Assignment::Modulus,
-                scanner::TokenType::BitwiseOr => expr::Assignment::BitwiseOr,
-                scanner::TokenType::BitwiseAnd => expr::Assignment::BitwiseAnd,
-                scanner::TokenType::BitwiseXor => expr::Assignment::BitwiseXor,
-                scanner::TokenType::LeftShift => expr::Assignment::LeftShift,
-                scanner::TokenType::RightShift => expr::Assignment::RightShift,
-                scanner::TokenType::LeftRotate => expr::Assignment::LeftRotate,
-                scanner::TokenType::RightRotate => expr::Assignment::RightRotate,
-                scanner::TokenType::LogicalAnd => expr::Assignment::LogicalAnd,
-                scanner::TokenType::LogicalOr => expr::Assignment::LogicalOr,
-                _ => unreachable!(
-                    "Reached a token in assignment that should not be reachable: {:?}",
-                    token.ty
-                ),
-            };
+            let assignment_type = assignment(&token);
             let value = self.addition()?;
 
             self.consume(
@@ -1033,7 +1046,6 @@ impl Parser {
             match identifier {
                 expr::Expr::Get(_, _) | expr::Expr::Variable(_) => {
                     return Ok(expr::Stmt::Set(identifier, assignment_type, value));
-                    // return Ok(assignment_type(Box::new(expr), Box::new(value)));
                 }
                 _ => {
                     return Err(Error::InvalidAssignment {
@@ -1044,8 +1056,7 @@ impl Parser {
             }
         }
         let token = self.previous().clone();
-        println!("peak: {:?}", self.peek());
-        println!("identifier: {:?}", identifier);
+        println!("peak: {:?} -- identifier: {:?}", self.peek(), identifier);
         Err(Error::InvalidAssignment {
             line: token.line,
             col: token.col,
@@ -1100,15 +1111,23 @@ impl Parser {
             });
         }
 
-        let maybe_retval = if self.matches(scanner::TokenType::Semicolon) {
+        let maybe_retval = if self.matches(scanner::TokenType::Semicolon).is_some() {
             None
         } else {
-            self.consume(scanner::TokenType::LeftParen, "Expected left paren after return statement.")?;
-            let token = self.consume(
-                scanner::TokenType::Identifier,
-                "Expected identifier after return statement.",
-            )?.clone();
-            self.consume(scanner::TokenType::RightParen, "Expected right paren after return statement state.")?;
+            self.consume(
+                scanner::TokenType::LeftParen,
+                "Expected left paren after return statement.",
+            )?;
+            let token = self
+                .consume(
+                    scanner::TokenType::Identifier,
+                    "Expected identifier after return statement.",
+                )?
+                .clone();
+            self.consume(
+                scanner::TokenType::RightParen,
+                "Expected right paren after return statement state.",
+            )?;
             self.consume(
                 scanner::TokenType::Semicolon,
                 "Expected ; after return value",
@@ -1160,9 +1179,9 @@ impl Parser {
             "Expected ) after if condition.",
         )?;
         let then_branch = Box::new(self.statement()?);
-        let maybe_else_branch = if self.matches(scanner::TokenType::Else) {
+        let maybe_else_branch = if self.matches(scanner::TokenType::Else).is_some() {
             Some(Box::new(self.statement()?))
-        } else if self.matches(scanner::TokenType::ElseIf) {
+        } else if self.matches(scanner::TokenType::ElseIf).is_some() {
             Some(Box::new(self.if_statement()?))
         } else {
             None
@@ -1201,7 +1220,7 @@ impl Parser {
     fn or(&mut self) -> Result<expr::Expr, Error> {
         let mut expr = self.and()?;
 
-        while self.matches(scanner::TokenType::Or) {
+        while self.matches(scanner::TokenType::Or).is_some() {
             let right = self.and()?;
             expr = expr::Expr::Logical(Box::new(expr), expr::LogicalOp::Or, Box::new(right));
         }
@@ -1212,7 +1231,7 @@ impl Parser {
     fn and(&mut self) -> Result<expr::Expr, Error> {
         let mut expr = self.equality()?;
 
-        while self.matches(scanner::TokenType::And) {
+        while self.matches(scanner::TokenType::And).is_some() {
             let right = self.equality()?;
             expr = expr::Expr::Logical(Box::new(expr), expr::LogicalOp::And, Box::new(right));
         }
@@ -1223,7 +1242,7 @@ impl Parser {
     fn comparison(&mut self) -> Result<expr::Expr, Error> {
         let mut expr = self.addition()?;
 
-        while self.match_one_of(
+        while let Some(operator_token) = self.match_one_of(
             vec![
                 scanner::TokenType::Greater,
                 scanner::TokenType::GreaterEqual,
@@ -1232,7 +1251,6 @@ impl Parser {
             ]
             .as_ref(),
         ) {
-            let operator_token = self.previous().clone();
             let right = Box::new(self.addition()?);
             let binop_maybe = Self::op_token_to_binop(&operator_token);
 
@@ -1250,9 +1268,14 @@ impl Parser {
     fn addition(&mut self) -> Result<expr::Expr, Error> {
         let mut expr = self.unary()?;
 
-        while self.match_one_of(vec![scanner::TokenType::Plus, scanner::TokenType::String, scanner::TokenType::Identifier].as_ref())
-        {
-            let operator_token = self.previous().clone();
+        while let Some(operator_token) = self.match_one_of(
+            vec![
+                scanner::TokenType::Plus,
+                scanner::TokenType::String,
+                scanner::TokenType::Identifier,
+            ]
+            .as_ref(),
+        ) {
             let right = if operator_token.ty == scanner::TokenType::String {
                 Box::new(Self::string(&operator_token)?)
             } else if operator_token.ty == scanner::TokenType::Identifier {
@@ -1281,8 +1304,7 @@ impl Parser {
     }
 
     fn unary(&mut self) -> Result<expr::Expr, Error> {
-        if self.matches(scanner::TokenType::Bang) {
-            let operator_token = self.previous().clone();
+        if let Some(operator_token) = self.matches(scanner::TokenType::Bang) {
             let right = Box::new(self.unary()?);
             let unary_op_maybe = Self::op_token_to_unary_op(&operator_token);
 
@@ -1301,9 +1323,9 @@ impl Parser {
         let mut col: i64 = 0;
 
         loop {
-            if self.matches(scanner::TokenType::LeftParen) {
+            if self.matches(scanner::TokenType::LeftParen).is_some() {
                 expr = self.finish_call(expr)?;
-            } else if self.matches(scanner::TokenType::Dot) {
+            } else if self.matches(scanner::TokenType::Dot).is_some() {
                 let name_token = self.peek().clone();
                 let name_tok = match name_token.ty {
                     scanner::TokenType::Integer | scanner::TokenType::Identifier => name_token,
@@ -1352,7 +1374,7 @@ impl Parser {
                     });
                 }
                 arguments.push(self.expression()?);
-                if !self.matches(scanner::TokenType::Comma) {
+                if self.matches(scanner::TokenType::Comma).is_none() {
                     break;
                 }
             }
@@ -1426,78 +1448,74 @@ impl Parser {
         let token = self.previous().clone();
         let v = String::from_utf8(token.lexeme).unwrap();
         let name_token;
-        match v.as_str() {
-            "var" => {
-                self.consume(scanner::TokenType::Dot, "Expected . after var prefix")?;
-                name_token = self
-                    .consume(scanner::TokenType::Identifier, "Expected variable name")?
-                    .clone();
-                    match &name_token.literal {
-                        Some(scanner::Literal::Identifier(s)) => {
-                            return Ok(expr::Expr::Variable(expr::Symbol {
-                                name: s.clone(),
-                                line: self.previous().line,
-                                col: self.previous().col,
-                                var_type: None,
-                            }))
-                        }
-                        Some(l) => panic!(
-                            "internal error in parser: when parsing identifier, found literal {:?}",
-                            l
-                        ),
-                        None => {
-                            panic!("internal error in parser: when parsing identifier, found no literal")
-                        }
-                    }
-            }
-            _ => {
-                let mut identifier = expr::Expr::Variable(expr::Symbol {
-                    name: v.clone(),
-                    line: self.previous().line,
-                    col: self.previous().col,
-                    var_type: None,
-                });
-                let mut prop: Vec<String> = vec![];
-                let mut line:usize=0;
-                let mut col:i64=0;
-                loop {
-                    if self.matches(scanner::TokenType::Dot) {
-                        let name_token = self.peek().clone();
-                        let name_tok = match name_token.ty {
-                            scanner::TokenType::Integer | scanner::TokenType::Identifier => name_token,
-                            _ => {
-                                return Err(Error::TokenMismatch {
-                                    expected: scanner::TokenType::Identifier,
-                                    found: name_token,
-                                    maybe_on_err_string: Some(
-                                        "Expected property name after '.'.".to_string(),
-                                    ),
-                                });
-                            }
-                        };
-                        self.advance();
-                        
-                            
-                        prop.push(String::from_utf8(name_tok.lexeme).unwrap());
-                        line = name_tok.line;
-                        col = name_tok.col;
-                    } else {
-                        break;
-                    }
+        if v.as_str() == "var" {
+            self.consume(scanner::TokenType::Dot, "Expected . after var prefix")?;
+            name_token = self
+                .consume(scanner::TokenType::Identifier, "Expected variable name")?
+                .clone();
+            match &name_token.literal {
+                Some(scanner::Literal::Identifier(s)) => {
+                    return Ok(expr::Expr::Variable(expr::Symbol {
+                        name: s.clone(),
+                        line: self.previous().line,
+                        col: self.previous().col,
+                        var_type: None,
+                    }))
                 }
-                if !prop.is_empty() {
-                    identifier = expr::Expr::Get(
-                        Box::new(identifier),
-                        expr::Symbol {
-                            name: prop.join("."),
-                            line,
-                            col,
-                            var_type: None,
-                        },
-                    );
+                Some(l) => panic!(
+                    "internal error in parser: when parsing identifier, found literal {:?}",
+                    l
+                ),
+                None => {
+                    panic!("internal error in parser: when parsing identifier, found no literal")
                 }
-                Ok(identifier)
             }
+        } else {
+            let mut identifier = expr::Expr::Variable(expr::Symbol {
+                name: v,
+                line: self.previous().line,
+                col: self.previous().col,
+                var_type: None,
+            });
+            let mut prop: Vec<String> = vec![];
+            let mut line: usize = 0;
+            let mut col: i64 = 0;
+            loop {
+                if self.matches(scanner::TokenType::Dot).is_some() {
+                    let name_token = self.peek().clone();
+                    let name_tok = match name_token.ty {
+                        scanner::TokenType::Integer | scanner::TokenType::Identifier => name_token,
+                        _ => {
+                            return Err(Error::TokenMismatch {
+                                expected: scanner::TokenType::Identifier,
+                                found: name_token,
+                                maybe_on_err_string: Some(
+                                    "Expected property name after '.'.".to_string(),
+                                ),
+                            });
+                        }
+                    };
+                    self.advance();
+
+                    prop.push(String::from_utf8(name_tok.lexeme).unwrap());
+                    line = name_tok.line;
+                    col = name_tok.col;
+                } else {
+                    break;
+                }
+            }
+            if !prop.is_empty() {
+                identifier = expr::Expr::Get(
+                    Box::new(identifier),
+                    expr::Symbol {
+                        name: prop.join("."),
+                        line,
+                        col,
+                        var_type: None,
+                    },
+                );
+            }
+            Ok(identifier)
         }
     }
 
@@ -1575,28 +1593,28 @@ impl Parser {
     }
 
     fn primary(&mut self) -> Result<expr::Expr, Error> {
-        if self.matches(scanner::TokenType::False) {
+        if self.matches(scanner::TokenType::False).is_some() {
             return Ok(expr::Expr::Literal(expr::Literal::False));
         }
-        if self.matches(scanner::TokenType::True) {
+        if self.matches(scanner::TokenType::True).is_some() {
             return Ok(expr::Expr::Literal(expr::Literal::True));
         }
-        if self.matches(scanner::TokenType::Integer) {
+        if self.matches(scanner::TokenType::Integer).is_some() {
             return self.integer();
         }
-        if self.matches(scanner::TokenType::Float) {
+        if self.matches(scanner::TokenType::Float).is_some() {
             return self.float();
         }
-        if self.matches(scanner::TokenType::Duration) {
+        if self.matches(scanner::TokenType::Duration).is_some() {
             return self.duration();
         }
-        if self.matches(scanner::TokenType::String) {
+        if self.matches(scanner::TokenType::String).is_some() {
             return Self::string(self.previous());
         }
-        if self.matches(scanner::TokenType::Identifier) {
+        if self.matches(scanner::TokenType::Identifier).is_some() {
             return self.identifier();
         }
-        if self.matches(scanner::TokenType::LeftParen) {
+        if self.matches(scanner::TokenType::LeftParen).is_some() {
             let expr = Box::new(self.expression()?);
             if let Err(err) = self.consume(
                 scanner::TokenType::RightParen,
@@ -1606,10 +1624,10 @@ impl Parser {
             }
             return Ok(expr::Expr::Grouping(expr));
         }
-        if self.matches(scanner::TokenType::If) {
+        if self.matches(scanner::TokenType::If).is_some() {
             return self.if_expr();
         }
-        if self.matches(scanner::TokenType::Colon) {
+        if self.matches(scanner::TokenType::Colon).is_some() {
             return self.colon();
         }
 
@@ -1666,14 +1684,13 @@ impl Parser {
     fn equality(&mut self) -> Result<expr::Expr, Error> {
         let mut expr = self.match_regex_or_acl()?;
 
-        while self.match_one_of(
+        while let Some(operator_token) = self.match_one_of(
             vec![
                 scanner::TokenType::BangEqual,
                 scanner::TokenType::EqualEqual,
             ]
             .as_ref(),
         ) {
-            let operator_token = self.previous().clone();
             let right = Box::new(self.match_regex_or_acl()?);
 
             let binop_maybe = Self::op_token_to_binop(&operator_token);
@@ -1692,10 +1709,9 @@ impl Parser {
     fn match_regex_or_acl(&mut self) -> Result<expr::Expr, Error> {
         let mut expr = self.comparison()?;
 
-        while self
+        while let Some(operator_token) = self
             .match_one_of(vec![scanner::TokenType::BangTilde, scanner::TokenType::Tilde].as_ref())
         {
-            let operator_token = self.previous().clone();
             let right = Box::new(self.comparison()?);
 
             let binop_maybe = Self::op_token_to_binop(&operator_token);
@@ -1753,7 +1769,9 @@ impl Parser {
                 line: tok.line,
                 col: tok.col,
             }),
-            scanner::TokenType::Identifier | scanner::TokenType::String | scanner::TokenType::Plus => Ok(expr::BinaryOp {
+            scanner::TokenType::Identifier
+            | scanner::TokenType::String
+            | scanner::TokenType::Plus => Ok(expr::BinaryOp {
                 ty: expr::BinaryOpTy::Plus,
                 line: tok.line,
                 col: tok.col,
@@ -1766,21 +1784,21 @@ impl Parser {
         }
     }
 
-    fn match_one_of(&mut self, types: &[scanner::TokenType]) -> bool {
+    fn match_one_of(&mut self, types: &[scanner::TokenType]) -> Option<scanner::Token> {
         for ty in types {
-            if self.matches(*ty) {
-                return true;
+            if let Some(token) = self.matches(*ty) {
+                return Some(token);
             }
         }
-        false
+        None
     }
 
-    fn matches(&mut self, ty: scanner::TokenType) -> bool {
+    fn matches(&mut self, ty: scanner::TokenType) -> Option<scanner::Token> {
         if self.check(ty) {
-            self.advance();
-            return true;
+            Some(self.advance().clone())
+        } else {
+            None
         }
-        false
     }
 
     fn check(&self, ty: scanner::TokenType) -> bool {
@@ -1811,7 +1829,7 @@ impl Parser {
         self.peek().ty == scanner::TokenType::Eof
     }
 
-    fn is_at_start(&self) -> bool {
+    const fn is_at_start(&self) -> bool {
         self.current == 0
     }
 

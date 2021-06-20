@@ -1,22 +1,14 @@
 #![feature(wrapping_int_impl)]
-// #![allow(dead_code)]
-// #![forbid(unsafe_code, future_incompatible, rust_2018_idioms)]
-// #![deny(missing_debug_implementations, nonstandard_style)]
+#![allow(dead_code)]
+#![forbid(unsafe_code, future_incompatible, rust_2018_idioms)]
+#![deny(missing_debug_implementations, nonstandard_style)]
 // #![warn(
-    //     // clippy::all,
-    //     // clippy::restriction,
-    //     clippy::pedantic,
-    //     clippy::nursery,
-    // )]
+//         // clippy::all,
+//         // clippy::restriction,
+//         clippy::pedantic,
+//         clippy::nursery,
+//     )]
 use clap::{App, Arg};
-use hyper::{
-    service::{make_service_fn, service_fn},
-    Body, Client, Error, Method, Request, Response, Server,
-};
-use std::u16;
-use std::{collections::HashMap, io, sync::Arc};
-use tokio::time::{interval, sleep, Duration};
-use tokio::{sync::RwLock, time::timeout};
 
 use std::fs;
 
