@@ -6,6 +6,7 @@ use std::u16;
 use std::{collections::HashMap, sync::Arc};
 use tokio::time::{interval, Duration};
 use tokio::{sync::RwLock, time::timeout};
+use hyper::http::Uri;
 
 use std::num::Wrapping;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -261,12 +262,6 @@ pub struct Req {
     // The full path, including query parameters.
     // https://developer.fastly.com/reference/vcl/variables/client-request/req-url/
     pub url: String,
-    // The file name specified in a URL. This will be the last component of the path, from the last / to the end, not including the query string.
-    // https://developer.fastly.com/reference/vcl/variables/client-request/req-url-basename/
-    // pub url.basename: String,
-    // The directories specified in a URL. This will be from the beginning of the URL up to the last /, not including the query string. The last / will not be part of req.url.dirname unless req.url.dirname is / (the root directory).
-    // https://developer.fastly.com/reference/vcl/variables/client-request/req-url-dirname/
-    // pub url.dirname: String,
     // The file extension specified in a URL.
     // https://developer.fastly.com/reference/vcl/variables/client-request/req-url-ext/
     // pub url.ext: String,
@@ -298,6 +293,38 @@ pub struct Req {
 }
 
 impl Req {
+    // The file name specified in a URL. This will be the last component of the path, from the last / to the end, not including the query string.
+    // https://developer.fastly.com/reference/vcl/variables/client-request/req-url-basename/
+    fn url_basename(&self) -> String {
+        let uri = self.url.parse::<Uri>().unwrap();
+        let path = uri.path();
+        if path == "/" {
+            "".to_string()
+        } else {
+            let mut parts: Vec<&str> =path.split('/').collect();
+            parts.pop().unwrap().to_string()
+        }
+    }
+
+    // The directories specified in a URL. This will be from the beginning of the URL up to the last /, not including the query string. The last / will not be part of req.url.dirname unless req.url.dirname is / (the root directory).
+    // https://developer.fastly.com/reference/vcl/variables/client-request/req-url-dirname/
+    fn url_dirname(&self) -> String {
+        let uri = self.url.parse::<Uri>().unwrap();
+        let path = uri.path();
+        if path == "/" {
+            "/".to_string()
+        } else {
+            let mut parts: Vec<&str> = uri.path().split('/').collect();
+            println!("parts: {:?}", parts);
+            parts.pop().unwrap();
+            if parts.len() == 1 {
+                "/".to_string()
+            } else {
+                parts.join("/")
+            }
+        }
+    }
+    
     async fn from_hyper_req(req: Request<Body>) -> Self {
         let uri = req.uri().to_string();
         let headers = req.headers();
@@ -1411,8 +1438,25 @@ impl Interpreter {
                         Value::Req(req) => {
                             // TODO: All the other req properties such as
                             // body.base64
+                            // backend
+                            // https://developer.fastly.com/reference/vcl/variables/miscellaneous/req-backend-ip/
+                            // backend.ip
+                            // backend.name
+                            // https://developer.fastly.com/reference/vcl/variables/miscellaneous/req-backend-port/
+                            // backend.port
+                            // https://developer.fastly.com/reference/vcl/variables/miscellaneous/req-service-id/
+                            // service_id
+                            // https://developer.fastly.com/reference/vcl/variables/miscellaneous/req-vcl/
+                            // vcl
+                            // https://developer.fastly.com/reference/vcl/variables/miscellaneous/req-vcl-generation/
+                            // vcl.generation
+                            // https://developer.fastly.com/reference/vcl/variables/miscellaneous/req-vcl-md5/
+                            // vcl.md5
+                            // https://developer.fastly.com/reference/vcl/variables/miscellaneous/req-vcl-version/
+                            // vcl.version
+                            // topurl
+                            // restarts
                             // http.*
-                            // url.basename
                             // url.dirname
                             // url.ext
                             // url.path
@@ -1436,6 +1480,8 @@ impl Interpreter {
                                 "proto" => Ok(Value::String(req.proto.clone())),
                                 "request" => Ok(Value::String(req.request.clone())),
                                 "url" => Ok(Value::String(req.url.clone())),
+                                "url.basename" => Ok(Value::String(req.url_basename())),
+                                "url.dirname" => Ok(Value::String(req.url_dirname())),
                                 "xid" => Ok(Value::String(req.xid.clone())),
                                 _ => todo!(),
                             }

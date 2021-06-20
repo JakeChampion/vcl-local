@@ -944,6 +944,9 @@ impl Parser {
 
     fn set_statement(&mut self) -> Result<expr::Stmt, Error> {
         let mut identifier = self.primary()?;
+        let mut prop: Vec<String> = vec![];
+        let mut line: usize = 0;
+        let mut col: i64 = 0;
         
         loop {
             if self.matches(scanner::TokenType::Dot) {
@@ -961,18 +964,23 @@ impl Parser {
                     }
                 };
                 self.advance();
-                identifier = expr::Expr::Get(
-                    Box::new(identifier),
-                    expr::Symbol {
-                        name: String::from_utf8(name_tok.lexeme).unwrap(),
-                        line: name_tok.line,
-                        col: name_tok.col,
-                        var_type: None,
-                    },
-                );
+                prop.push(String::from_utf8(name_tok.lexeme).unwrap());
+                line = name_tok.line;
+                col = name_tok.col;
             } else {
                 break;
             }
+        }
+        if !prop.is_empty() {
+            identifier = expr::Expr::Get(
+                Box::new(identifier),
+                expr::Symbol {
+                    name: prop.join("."),
+                    line,
+                    col,
+                    var_type: None,
+                },
+            );
         }
         if self.match_one_of(
             vec![
@@ -1286,6 +1294,9 @@ impl Parser {
 
     fn call(&mut self) -> Result<expr::Expr, Error> {
         let mut expr = self.primary()?;
+        let mut prop: Vec<String> = vec![];
+        let mut line: usize = 0;
+        let mut col: i64 = 0;
 
         loop {
             if self.matches(scanner::TokenType::LeftParen) {
@@ -1305,18 +1316,23 @@ impl Parser {
                     }
                 };
                 self.advance();
-                expr = expr::Expr::Get(
-                    Box::new(expr),
-                    expr::Symbol {
-                        name: String::from_utf8(name_tok.lexeme).unwrap(),
-                        line: name_tok.line,
-                        col: name_tok.col,
-                        var_type: None,
-                    },
-                );
+                prop.push(String::from_utf8(name_tok.lexeme).unwrap());
+                line = name_tok.line;
+                col = name_tok.col;
             } else {
                 break;
             }
+        }
+        if !prop.is_empty() {
+            expr = expr::Expr::Get(
+                Box::new(expr),
+                expr::Symbol {
+                    name: prop.join("."),
+                    line,
+                    col,
+                    var_type: None,
+                },
+            );
         }
         Ok(expr)
     }
@@ -1439,6 +1455,9 @@ impl Parser {
                     col: self.previous().col,
                     var_type: None,
                 });
+                let mut prop: Vec<String> = vec![];
+                let mut line:usize=0;
+                let mut col:i64=0;
                 loop {
                     if self.matches(scanner::TokenType::Dot) {
                         let name_token = self.peek().clone();
@@ -1455,20 +1474,27 @@ impl Parser {
                             }
                         };
                         self.advance();
-                        identifier = expr::Expr::Get(
-                            Box::new(identifier),
-                            expr::Symbol {
-                                name: String::from_utf8(name_tok.lexeme).unwrap(),
-                                line: name_tok.line,
-                                col: name_tok.col,
-                                var_type: None,
-                            },
-                        );
+                        
+                            
+                        prop.push(String::from_utf8(name_tok.lexeme).unwrap());
+                        line = name_tok.line;
+                        col = name_tok.col;
                     } else {
-                        // break;
-                        return Ok(identifier);
+                        break;
                     }
                 }
+                if !prop.is_empty() {
+                    identifier = expr::Expr::Get(
+                        Box::new(identifier),
+                        expr::Symbol {
+                            name: prop.join("."),
+                            line,
+                            col,
+                            var_type: None,
+                        },
+                    );
+                }
+                Ok(identifier)
             }
         }
     }
