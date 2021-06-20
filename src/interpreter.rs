@@ -66,6 +66,7 @@ pub enum Value {
     Backend(Backend),
     Nil,
     Req(Req),
+    RTime(Duration),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -231,6 +232,9 @@ pub struct Req {
     // Whether VCL is being evaluated for a stale while revalidate request to a backend.
     // https://developer.fastly.com/reference/vcl/variables/client-request/req-is-background-fetch/
     pub is_background_fetch: bool,
+    // Whether the request was received from another machine in the cluster.
+    // https://developer.fastly.com/reference/vcl/variables/server/req-is-clustering/
+    pub is_clustering: bool,
     // Whether VCL is being evaluated within an ESI fragment.
     // https://developer.fastly.com/reference/vcl/variables/esi/req-is-esi-subreq/
     pub is_esi_subreq: bool,
@@ -240,37 +244,34 @@ pub struct Req {
     // Whether the handled request is a purge request.
     // https://developer.fastly.com/reference/vcl/variables/client-request/req-is-purge/
     pub is_purge: bool,
+    // Indicates whether the request uses SSL or not.
+    // https://developer.fastly.com/reference/vcl/variables/client-connection/req-is-ssl/
+    pub is_ssl: bool,
+    // The maximum stale age that is acceptable for a particular request.
+    // https://developer.fastly.com/reference/vcl/variables/server/req-max-stale-if-error/
+    pub max_stale_if_error: Duration,
+    // Same as req.max_stale_if_error except controls the maximum stale age for stale while revalidate functionality.
+    // https://developer.fastly.com/reference/vcl/variables/server/req-max-stale-while-revalidate/
+    pub max_stale_while_revalidate: Duration,
     // HTTP method sent by the client, such as "GET" or "POST".
     // Requests using the HTTP PURGE method will appear in VCL as "FASTLYPURGE". All other methods are reported as received, including any unknown or unrecognized methods, provided that the request is syntactically valid HTTP.
     // https://developer.fastly.com/reference/vcl/variables/client-request/req-method/
     pub method: String,
-    // The variable req.postbody is an alias for req.body.
-    // https://developer.fastly.com/reference/vcl/variables/client-request/req-postbody/
-    pub postbody: String,
     // HTTP protocol version in use for this request. For example HTTP/1.1.
     // https://developer.fastly.com/reference/vcl/variables/client-request/req-proto/
     pub proto: String,
+    // Indicates whether the request uses SSL or not. Possible values are http and https.
+    // https://developer.fastly.com/reference/vcl/variables/client-connection/req-protocol/
+    pub protocol: String,
     // Counts the number of times the VCL has been restarted.
     // https://developer.fastly.com/reference/vcl/variables/server/req-restarts/
     pub restarts: i8,
-    // Alias of req.method.
-    // https://developer.fastly.com/reference/vcl/variables/client-request/req-request/
-    pub request: String,
     // In an ESI subrequest, contains the URL of the top-level request that ESI processing was enabled on. If the request is not an ESI, req.topurl will be a not set string value.
     // https://developer.fastly.com/reference/vcl/variables/esi/req-topurl/
     pub topurl: String,
     // The full path, including query parameters.
     // https://developer.fastly.com/reference/vcl/variables/client-request/req-url/
     pub url: String,
-    // The file extension specified in a URL.
-    // https://developer.fastly.com/reference/vcl/variables/client-request/req-url-ext/
-    // pub url.ext: String,
-    // The full path, without any query parameters.
-    // This variable is updated any time req.url is set.
-    // pub url.path: String,
-    // The query string portion of req.url. This will be from immediately after the ? to the end of the URL.
-    // https://developer.fastly.com/reference/vcl/variables/client-request/req-url-qs/
-    // pub url.qs: String,
     // Request ID.
     // https://developer.fastly.com/reference/vcl/variables/client-request/req-xid/
     pub xid: String,
@@ -293,6 +294,12 @@ pub struct Req {
 }
 
 impl Req {
+    // Same as req.body, except the request body is encoded in Base64, which handles null characters and allows representation of binary bodies.
+    // https://developer.fastly.com/reference/vcl/variables/client-request/req-body-base64/
+    fn body_base64(&self) -> String {
+        base64::encode(&self.body)
+    }
+
     // The file name specified in a URL. This will be the last component of the path, from the last / to the end, not including the query string.
     // https://developer.fastly.com/reference/vcl/variables/client-request/req-url-basename/
     fn url_basename(&self) -> String {
@@ -306,6 +313,30 @@ impl Req {
         }
     }
 
+    // The file extension specified in a URL.
+    // https://developer.fastly.com/reference/vcl/variables/client-request/req-url-ext/
+    fn url_ext(&self) -> String {
+        let uri = self.url.parse::<Uri>().unwrap();
+        let path = uri.path();
+        let mut parts: Vec<&str> =path.split('.').collect();
+        parts.pop().unwrap().to_string()
+    }
+    // The full path, without any query parameters.
+    // This variable is updated any time req.url is set.
+    fn url_path(&self)-> String {
+        let uri = self.url.parse::<Uri>().unwrap();
+        uri.path().to_string()
+    }
+    // The query string portion of req.url. This will be from immediately after the ? to the end of the URL.
+    // https://developer.fastly.com/reference/vcl/variables/client-request/req-url-qs/
+    fn url_qs(&self) -> String {
+        let uri = self.url.parse::<Uri>().unwrap();
+        match uri.query() {
+            Some(qs) => qs.to_string(),
+            None => "".to_string(),
+        }
+    }
+
     // The directories specified in a URL. This will be from the beginning of the URL up to the last /, not including the query string. The last / will not be part of req.url.dirname unless req.url.dirname is / (the root directory).
     // https://developer.fastly.com/reference/vcl/variables/client-request/req-url-dirname/
     fn url_dirname(&self) -> String {
@@ -315,7 +346,6 @@ impl Req {
             "/".to_string()
         } else {
             let mut parts: Vec<&str> = uri.path().split('/').collect();
-            println!("parts: {:?}", parts);
             parts.pop().unwrap();
             if parts.len() == 1 {
                 "/".to_string()
@@ -360,14 +390,17 @@ impl Req {
             hash_ignore_busy: false,
             header_bytes_read,
             is_background_fetch: false,
+            is_clustering: false,
             is_esi_subreq: false,
             is_ipv6: false,
             is_purge: false,
+            is_ssl: false,
+            max_stale_if_error: interpret_duration(9223372036.854, &DurationUnit::Seconds),
+            max_stale_while_revalidate: interpret_duration(9223372036.854, &DurationUnit::Seconds),
             method: method.clone(),
-            postbody: body,
             proto,
+            protocol: "http".to_string(),
             restarts: 0,
-            request: method,
             topurl: "".to_string(),
             url: uri,
             xid: "1".to_string(),
@@ -391,6 +424,7 @@ pub const fn type_of(val: &Value) -> Type {
         Value::Function(_) => Type::Function,
         Value::Req(_) => Type::Req,
         Value::Nil => Type::Nil,
+        Value::RTime(_) => Type::Rtime,
     }
 }
 
@@ -405,6 +439,7 @@ impl fmt::Display for Value {
             Value::Backend(backend) => write!(f, "Backend({})", backend.name),
             Value::Req(req) => write!(f, "{}", req.url),
             Value::Nil => write!(f, "nil"),
+            Value::RTime(duration) => write!(f, "{}", duration.as_secs()),
         }
     }
 }
@@ -1326,6 +1361,7 @@ impl Interpreter {
             }
             expr::Stmt::Log(e) => match self.interpret_expr(e) {
                 Ok(val) => {
+                    // TODO: when logging RTime, always convert it to seconds and three decimals places
                     println!("{}", val);
                     self.output.push(format!("{}", val));
                     Ok(None)
@@ -1428,6 +1464,7 @@ impl Interpreter {
                 if let expr::Expr::Variable(lhs) = lhs.as_ref() {
                     let v = self.env.get(&lhs).expect("grr");
                     match v {
+                        &Value::RTime(_) => todo!(),
                         Value::Integer(_) => todo!(),
                         Value::Float(_) => todo!(),
                         Value::String(_) => todo!(),
@@ -1437,51 +1474,66 @@ impl Interpreter {
                         Value::Nil => todo!(),
                         Value::Req(req) => {
                             // TODO: All the other req properties such as
-                            // body.base64
                             // backend
                             // https://developer.fastly.com/reference/vcl/variables/miscellaneous/req-backend-ip/
                             // backend.ip
                             // backend.name
                             // https://developer.fastly.com/reference/vcl/variables/miscellaneous/req-backend-port/
                             // backend.port
-                            // https://developer.fastly.com/reference/vcl/variables/miscellaneous/req-service-id/
-                            // service_id
-                            // https://developer.fastly.com/reference/vcl/variables/miscellaneous/req-vcl/
-                            // vcl
-                            // https://developer.fastly.com/reference/vcl/variables/miscellaneous/req-vcl-generation/
-                            // vcl.generation
-                            // https://developer.fastly.com/reference/vcl/variables/miscellaneous/req-vcl-md5/
-                            // vcl.md5
-                            // https://developer.fastly.com/reference/vcl/variables/miscellaneous/req-vcl-version/
-                            // vcl.version
-                            // topurl
-                            // restarts
                             // http.*
-                            // url.dirname
-                            // url.ext
-                            // url.path
-                            // url.qs
                             match attr.name.as_str() {
+                                "body" => Ok(Value::String(req.body.clone())),
+                                "body.base64" => Ok(Value::String(req.body_base64())),
+                                "body_bytes_read" => Ok(Value::Integer(req.body_bytes_read.clone())),
+                                "bytes_read" => Ok(Value::Integer(req.bytes_read)),
                                 "enable_range_on_pass" => Ok(Value::Bool(req.enable_range_on_pass)),
                                 "enable_segmented_caching" => {
                                     Ok(Value::Bool(req.enable_segmented_caching))
                                 }
                                 "esi" => Ok(Value::Bool(req.esi)),
                                 "esi_level" => Ok(Value::Integer(req.esi_level)),
+                                // https://developer.fastly.com/reference/vcl/variables/server/req-grace/
+                                "grace" => Ok(Value::RTime(req.max_stale_if_error)),
                                 "hash_always_miss" => Ok(Value::Bool(req.hash_always_miss)),
                                 "hash_ignore_busy" => Ok(Value::Bool(req.hash_ignore_busy)),
+                                "header_bytes_read" => Ok(Value::Integer(req.header_bytes_read)),
+                                "is_background_fetch" => Ok(Value::Bool(req.is_background_fetch)),
+                                "is_clustering" => Ok(Value::Bool(req.is_clustering)),
+                                "is_esi_subreq" => Ok(Value::Bool(req.is_esi_subreq)),
                                 "is_ipv6" => Ok(Value::Bool(req.is_ipv6)),
                                 "is_purge" => Ok(Value::Bool(req.is_purge)),
-                                "is_background_fetch" => Ok(Value::Bool(req.is_background_fetch)),
-                                "body" => Ok(Value::String(req.body.clone())),
-                                "postbody" => Ok(Value::String(req.body.clone())),
-                                "header_bytes_read" => Ok(Value::Integer(req.header_bytes_read)),
+                                "is_ssl" => Ok(Value::Bool(req.is_ssl)),
+                                "max_stale_if_error" => Ok(Value::RTime(req.max_stale_if_error)),
+                                "max_stale_while_revalidate" => Ok(Value::RTime(req.max_stale_while_revalidate)),
                                 "method" => Ok(Value::String(req.method.clone())),
+                                // The variable req.postbody is an alias for req.body.
+                                // https://developer.fastly.com/reference/vcl/variables/client-request/req-postbody/
+                                "postbody" => Ok(Value::String(req.body.clone())),
                                 "proto" => Ok(Value::String(req.proto.clone())),
-                                "request" => Ok(Value::String(req.request.clone())),
+                                "protocol" => Ok(Value::String(req.protocol.clone())),
+                                // Alias of req.method.
+                                // https://developer.fastly.com/reference/vcl/variables/client-request/req-request/
+                                "request" => Ok(Value::String(req.method.clone())),
+                                "restarts" => Ok(Value::Integer(Wrapping(req.restarts as i64))),
+                                // Fastly service ID.
+                                // https://developer.fastly.com/reference/vcl/variables/miscellaneous/req-service-id/
+                                "service_id" => Ok(Value::String("7iO2GdsfBkRxWfssgoM1xI".to_string())),
+                                "topurl" => Ok(Value::String(req.topurl.clone())),
                                 "url" => Ok(Value::String(req.url.clone())),
                                 "url.basename" => Ok(Value::String(req.url_basename())),
                                 "url.dirname" => Ok(Value::String(req.url_dirname())),
+                                "url.ext" => Ok(Value::String(req.url_ext())),
+                                "url.path" => Ok(Value::String(req.url_path())),
+                                "url.qs" => Ok(Value::String(req.url_qs())),
+                                // https://developer.fastly.com/reference/vcl/variables/miscellaneous/req-vcl/
+                                "vcl" => Ok(Value::String("7iO2GdsfBkRxWfssgoM1xI.1_0-51269ab2e4ef1da370a2d6e0d35d7b6e".to_string())),
+                                // https://developer.fastly.com/reference/vcl/variables/miscellaneous/req-vcl-generation/
+                                "vcl.generation" => Ok(Value::Integer(Wrapping(1))),
+                                // https://developer.fastly.com/reference/vcl/variables/miscellaneous/req-vcl-md5/
+                                // TODO: Maybe actually md5 the vcl?
+                                "vcl.md5" => Ok(Value::String("51269ab2e4ef1da370a2d6e0d35d7b6e".to_string())),
+                                // https://developer.fastly.com/reference/vcl/variables/miscellaneous/req-vcl-version/
+                                "vcl.version" => Ok(Value::Integer(Wrapping(1))),
                                 "xid" => Ok(Value::String(req.xid.clone())),
                                 _ => todo!(),
                             }

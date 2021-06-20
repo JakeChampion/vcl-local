@@ -597,7 +597,6 @@ impl Parser {
     fn probe(&mut self) -> Result<expr::Probe, Error> {
         let token = self.consume(scanner::TokenType::String, "15678905")?;
         if let Literal::Str(probe_str) = token.literal.clone().unwrap() {
-            println!("abc: {:?}", probe_str);
             let mut a = probe_str.split_whitespace();
             let method = a.next().unwrap();
             let method = Method::from_str(method).unwrap();
@@ -1037,7 +1036,6 @@ impl Parser {
                     // return Ok(assignment_type(Box::new(expr), Box::new(value)));
                 }
                 _ => {
-                    println!("fff");
                     return Err(Error::InvalidAssignment {
                         line: token.line,
                         col: token.col,
@@ -1252,11 +1250,15 @@ impl Parser {
     fn addition(&mut self) -> Result<expr::Expr, Error> {
         let mut expr = self.unary()?;
 
-        while self.match_one_of(vec![scanner::TokenType::Plus, scanner::TokenType::String].as_ref())
+        while self.match_one_of(vec![scanner::TokenType::Plus, scanner::TokenType::String, scanner::TokenType::Identifier].as_ref())
         {
             let operator_token = self.previous().clone();
             let right = if operator_token.ty == scanner::TokenType::String {
                 Box::new(Self::string(&operator_token)?)
+            } else if operator_token.ty == scanner::TokenType::Identifier {
+                self.recede();
+                let t = self.call()?;
+                Box::new(t)
             } else {
                 Box::new(self.unary()?)
             };
@@ -1751,7 +1753,7 @@ impl Parser {
                 line: tok.line,
                 col: tok.col,
             }),
-            scanner::TokenType::String | scanner::TokenType::Plus => Ok(expr::BinaryOp {
+            scanner::TokenType::Identifier | scanner::TokenType::String | scanner::TokenType::Plus => Ok(expr::BinaryOp {
                 ty: expr::BinaryOpTy::Plus,
                 line: tok.line,
                 col: tok.col,
@@ -1797,8 +1799,20 @@ impl Parser {
         self.previous()
     }
 
+    fn recede(&mut self) -> &scanner::Token {
+        if !self.is_at_start() {
+            self.current -= 1
+        }
+
+        self.peek()
+    }
+
     fn is_at_end(&self) -> bool {
         self.peek().ty == scanner::TokenType::Eof
+    }
+
+    fn is_at_start(&self) -> bool {
+        self.current == 0
     }
 
     fn peek(&self) -> &scanner::Token {
