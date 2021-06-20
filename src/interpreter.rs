@@ -206,6 +206,9 @@ pub struct Req {
     // Total bytes read from the client generating the request.
     // https://developer.fastly.com/reference/vcl/variables/client-request/req-bytes-read/
     pub bytes_read: Wrapping<i64>,
+    // The digest (hash) of the currently served object, derived from information fed into req.hash during the most recent run of vcl_hash. This variable returns the digest in hexadecimal (64 characters).
+    // https://developer.fastly.com/reference/vcl/variables/cache-object/req-digest/
+    pub digest: String,
     // Apply range handling for responses on pass.
     // https://developer.fastly.com/reference/vcl/variables/client-request/req-enable-range-on-pass/
     pub enable_range_on_pass: bool,
@@ -218,6 +221,9 @@ pub struct Req {
     // Level of ESI subrequest. A value of 0 indicates this is the top-level request. A value of 2 would signify an include within an include.
     // https://developer.fastly.com/reference/vcl/variables/esi/req-esi-level/
     pub esi_level: Wrapping<i64>,
+    // Hash value for the object. The hash determines what is unique about an object. Anything added to the hash will cause Varnish to cache objects separately based on that information.
+    // https://developer.fastly.com/reference/vcl/variables/cache-object/req-hash/
+    pub hash: String,
     // Forces the request to miss whether we have a cached version of the object or not. This differs from passing in that Varnish will still request collapse and will avoid the creation of hit_for_pass objects.
     // https://developer.fastly.com/reference/vcl/variables/client-request/req-hash-always-miss/
     pub hash_always_miss: bool,
@@ -296,6 +302,13 @@ impl Req {
     // https://developer.fastly.com/reference/vcl/variables/client-request/req-body-base64/
     fn body_base64(&self) -> String {
         base64::encode(&self.body)
+    }
+
+    // A floating point number between 0 and 1 derived from the object digest.
+    // https://developer.fastly.com/reference/vcl/variables/cache-object/req-digest-ratio/
+    fn digest_ratio(&self) -> f64 {
+        //TODO - something with req.digest
+        0.1
     }
 
     // The file name specified in a URL. This will be the last component of the path, from the last / to the end, not including the query string.
@@ -405,6 +418,8 @@ impl Req {
             topurl: "".to_string(),
             url: uri,
             xid: "1".to_string(),
+            digest: "00000000".to_string(),
+            hash: "00000000".to_string(),
         }
     }
 }
@@ -1520,10 +1535,13 @@ impl Interpreter {
             "body.base64" => Ok(Value::String(req.body_base64())),
             "body_bytes_read" => Ok(Value::Integer(req.body_bytes_read)),
             "bytes_read" => Ok(Value::Integer(req.bytes_read)),
+            "digest" => Ok(Value::String(req.digest.clone())),
+            "digest.ratio" => Ok(Value::Float(req.digest_ratio())),
             "enable_range_on_pass" => Ok(Value::Bool(req.enable_range_on_pass)),
             "enable_segmented_caching" => Ok(Value::Bool(req.enable_segmented_caching)),
             "esi" => Ok(Value::Bool(req.esi)),
             "esi_level" => Ok(Value::Integer(req.esi_level)),
+            "hash" => Ok(Value::String(req.hash.clone())),
             "hash_always_miss" => Ok(Value::Bool(req.hash_always_miss)),
             "hash_ignore_busy" => Ok(Value::Bool(req.hash_ignore_busy)),
             "header_bytes_read" => Ok(Value::Integer(req.header_bytes_read)),
