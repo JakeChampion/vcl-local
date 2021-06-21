@@ -65,6 +65,7 @@ pub enum Value {
     Nil,
     Req(Box<Req>),
     RTime(Duration),
+    Symbol(Symbol)
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -281,7 +282,7 @@ pub struct Req {
     pub xid: String,
     // The backend to use to service the request.
     // https://developer.fastly.com/reference/vcl/variables/backend-connection/req-backend/
-    // pub backend: Backend,
+    pub backend: Backend,
     // Whether or not this backend, or recursively any of the backends under this director, is considered healthy.
     // https://developer.fastly.com/reference/vcl/variables/backend-connection/req-backend-healthy/
     // pub backend.healthy: Bool,
@@ -366,7 +367,7 @@ impl Req {
         }
     }
 
-    async fn from_hyper_req(req: Request<Body>) -> Self {
+    async fn from_hyper_req(req: Request<Body>, backend: Backend) -> Self {
         let uri = req.uri().to_string();
         let headers = req.headers();
         let mut header_bytes_read = Wrapping(0_i64);
@@ -390,6 +391,7 @@ impl Req {
         let bytes_read = header_bytes_read + body_bytes_read;
 
         Self {
+            backend,
             body,
             body_bytes_read,
             bytes_read,
@@ -441,6 +443,7 @@ pub const fn type_of(val: &Value) -> Type {
         Value::Req(_) => Type::Req,
         Value::Nil => Type::Nil,
         Value::RTime(_) => Type::Rtime,
+        Value::Symbol(_) => Type::Id,
     }
 }
 
@@ -456,6 +459,7 @@ impl fmt::Display for Value {
             Value::Req(req) => write!(f, "{}", req.url),
             Value::Nil => write!(f, "nil"),
             Value::RTime(duration) => write!(f, "{}", duration.as_secs()),
+            Value::Symbol(sym) =>  write!(f, "Id({})", sym.name),
         }
     }
 }
@@ -555,6 +559,7 @@ impl Environment {
 
     pub fn get_sym(&mut self, sym: expr::Expr) -> Result<Symbol, String> {
         let s = match sym {
+            // TODO: fix this
             expr::Expr::Get(s, _) => self.get_sym(s.as_ref().clone())?,
             expr::Expr::Variable(sym) => sym,
             _ => {
@@ -565,8 +570,46 @@ impl Environment {
     }
 
     pub fn assign(&mut self, sym: expr::Expr, val: &Value) -> Result<(), String> {
-        let sym = self.get_sym(sym)?;
+        let mut rest = None;
+        let sym = match &sym {
+            expr::Expr::Get(root, inner) => {
+                rest = Some(inner);
+                self.get_sym(root.as_ref().to_owned())?
+            },
+            expr::Expr::Variable(_) => self.get_sym(sym.clone())?,
+            _ => todo!(),
+        };
         if let Some(entry) = self.venv.clone().get(&sym.name) {
+            if let Some(prop) = rest {
+                if sym.name == "req" {
+                    match prop.name.as_str() {
+                        "backend" => {
+                            let req = entry.1.clone();
+                            if let Some(req) = req {
+                                match req {
+                                    Value::Req(mut req) => {
+                                        println!("val: {:?}", val);
+                                        match val {
+                                            Value::Backend(val) => {
+                                                req.backend = val.clone();
+                                                self.define(sym.clone(), Type::Req, Some(Value::Req(req)));
+                                                return Ok(());
+                                            },
+                                            _ => todo!("stop"),
+                                        }
+                                    },
+                                    _ => todo!("lol what"),
+                                }
+                            } else {
+                                todo!(":?");
+                            }
+                        }
+                        _ => todo!("what mate?"),
+                    }
+                } else {
+                    todo!("what other variables can have properties?");
+                }
+            }
             if entry.0 == type_of(val) {
                 self.define(sym, entry.0, Some(val.clone()));
                 return Ok(());
@@ -671,21 +714,21 @@ fn combine_subs(subroutines: &[expr::SubDecl], name: &str) -> expr::SubDecl {
 impl Interpreter {
     pub async fn interpret(
         &mut self,
-        program: &Program,
+        program: Program,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         self.interrupted.store(false, Ordering::Release);
-        let backends: Vec<&Box<expr::Backend>> = program
+        let backends: Vec<Box<expr::Backend>> = program
             .body
             .iter()
             .filter_map(|c| match c {
-                expr::ABDIST::Backend(b) => Some(b),
+                expr::ABDIST::Backend(b) => Some(b.clone()),
                 _ => None,
             })
             .collect();
 
         // 1. setup backends + healthchecks
         // 2. setup directors TODO
-        for backend in backends {
+        for backend in &backends {
             self.interpret_backend(backend);
         }
         // 3. setup acls TODO
@@ -735,19 +778,27 @@ impl Interpreter {
 
         // Construct our SocketAddr to listen on...
         let addr = ([127, 0, 0, 1], 3000).into();
+        let default_backend = backends.first().unwrap().name.clone();
+        let val = self.lookup(&default_backend).expect("ergh");
+        let backend = match val {
+            Value::Backend(b) => b.clone(),
+            _ => todo!()
+        };
 
         // And a MakeService to handle each connection...
         let make_svc = make_service_fn(move |_| {
             let app = app.clone();
             let s = self.clone();
+            let backend = backend.clone();
             // let program = program.clone();
             async move {
                 Ok::<_, Error>(service_fn(move |req: Request<Body>| {
                     let app = app.clone();
-                    // let program = program.clone();
                     let mut s = s.clone();
+                    let backend = backend.clone();
+                    // let program = program.clone();
                     async move {
-                        let mut vcl_req = Req::from_hyper_req(req).await;
+                        let mut vcl_req = Req::from_hyper_req(req, backend).await;
                         s.execute_app(&app, &mut vcl_req);
                         Ok::<_, Error>(Response::new(Body::from("Hello World")))
                     }
@@ -1402,6 +1453,7 @@ impl Interpreter {
                 Ok(None)
             }
             expr::Stmt::Set(identifier, assignment, value) => {
+                println!("set statement =  identifier: {:?} -  assignment: {:?} - value: {:?}", identifier, assignment, value);
                 self.interpret_set(identifier, assignment, value)?;
                 Ok(None)
             }
@@ -1433,7 +1485,8 @@ impl Interpreter {
         match assignment {
             expr::Assignment::Assign => {
                 let val = self.interpret_expr(val_expr)?;
-
+                println!("val_expr: {:?}", val_expr);
+                println!("sym: {:?} -- val: {:?}", sym, val);
                 if let Err(err) = self.env.assign(sym.clone(), &val) {
                     return Err(err);
                 }
@@ -1478,7 +1531,7 @@ impl Interpreter {
                 if let expr::Expr::Variable(lhs) = lhs.as_ref() {
                     let v = self.env.get(&lhs).expect("grr");
                     match v {
-                        &Value::RTime(_) => todo!(),
+                        Value::RTime(_) => todo!(),
                         Value::Integer(_) => todo!(),
                         Value::Float(_) => todo!(),
                         Value::String(_) => todo!(),
@@ -1487,6 +1540,7 @@ impl Interpreter {
                         Value::Backend(_) => todo!(),
                         Value::Nil => todo!(),
                         Value::Req(req) => Self::get_req_attr(req, attr),
+                        Value::Symbol(_) => todo!(),
                     }
                 } else {
                     todo!()

@@ -94,5 +94,5 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // }
 
     let mut interpreter: interpreter::Interpreter = interpreter::Interpreter::default();
-    interpreter.interpret(&program).await
+    interpreter.interpret(program).await
 }
