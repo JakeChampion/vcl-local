@@ -37,6 +37,18 @@ backend backend_name {
 
 sub vcl_recv {
     set req.backend = backend_name;
+    set req.enable_range_on_pass = true;
+    set req.enable_segmented_caching = true;
+    set req.esi = true;
+    set req.grace = 10s;
+    set req.hash_always_miss = false;
+    set req.hash_ignore_busy = false;
+    set req.max_stale_if_error = 10s;
+    set req.max_stale_while_revalidate = 5s;
+    set req.method = "s";
+    set req.proto = "a";
+    set req.request = "d";
+    set req.url = "/";
     # log "basename: " req.url.basename;
     # log "dirname: " req.url.dirname;
     # log "path: " req.url.path;

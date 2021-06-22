@@ -595,7 +595,227 @@ impl Environment {
                                                 self.define(sym.clone(), Type::Req, Some(Value::Req(req)));
                                                 return Ok(());
                                             },
-                                            _ => todo!("stop"),
+                                            _ => todo!("you can only set a backend to req.backend"),
+                                        }
+                                    },
+                                    _ => todo!("lol what"),
+                                }
+                            } else {
+                                todo!(":?");
+                            }
+                        }
+                        "enable_range_on_pass" => {
+                            let req = entry.1.clone();
+                            if let Some(req) = req {
+                                match req {
+                                    Value::Req(mut req) => {
+                                        println!("val: {:?}", val);
+                                        match val {
+                                            Value::Bool(val) => {
+                                                req.enable_range_on_pass = *val;
+                                                self.define(sym.clone(), Type::Req, Some(Value::Req(req)));
+                                                return Ok(());
+                                            },
+                                            _ => todo!("you can only set a bool to req.enable_range_on_pass"),
+                                            
+                                        }
+                                    },
+                                    _ => todo!("lol what"),
+                                }
+                            } else {
+                                todo!(":?");
+                            }
+                        }
+                        "enable_segmented_caching" => {
+                            let req = entry.1.clone();
+                            if let Some(req) = req {
+                                match req {
+                                    Value::Req(mut req) => {
+                                        println!("val: {:?}", val);
+                                        match val {
+                                            Value::Bool(val) => {
+                                                req.enable_segmented_caching = *val;
+                                                self.define(sym.clone(), Type::Req, Some(Value::Req(req)));
+                                                return Ok(());
+                                            },
+                                            _ => todo!("you can only set a bool to req.enable_segmented_caching"),
+                                            
+                                        }
+                                    },
+                                    _ => todo!("lol what"),
+                                }
+                            } else {
+                                todo!(":?");
+                            }
+                        }
+                        "esi" => {
+                            let req = entry.1.clone();
+                            if let Some(req) = req {
+                                match req {
+                                    Value::Req(mut req) => {
+                                        println!("val: {:?}", val);
+                                        match val {
+                                            Value::Bool(val) => {
+                                                req.esi = *val;
+                                                self.define(sym.clone(), Type::Req, Some(Value::Req(req)));
+                                                return Ok(());
+                                            },
+                                            _ => todo!("you can only set a bool to req.esi"),
+                                            
+                                        }
+                                    },
+                                    _ => todo!("lol what"),
+                                }
+                            } else {
+                                todo!(":?");
+                            }
+                        }
+                        "grace" | "max_stale_if_error" => {
+                            let req = entry.1.clone();
+                            if let Some(req) = req {
+                                match req {
+                                    Value::Req(mut req) => {
+                                        println!("val: {:?}", val);
+                                        match val {
+                                            Value::RTime(val) => {
+                                                req.max_stale_if_error = val.clone();
+                                                self.define(sym.clone(), Type::Req, Some(Value::Req(req)));
+                                                return Ok(());
+                                            },
+                                            _ => todo!("you can only set a RTime to req.grace or req.max_stale_if_error"),
+                                            
+                                        }
+                                    },
+                                    _ => todo!("lol what"),
+                                }
+                            } else {
+                                todo!(":?");
+                            }
+                        }
+                        "hash_always_miss" => {
+                            let req = entry.1.clone();
+                            if let Some(req) = req {
+                                match req {
+                                    Value::Req(mut req) => {
+                                        println!("val: {:?}", val);
+                                        match val {
+                                            Value::Bool(val) => {
+                                                req.hash_always_miss = *val;
+                                                self.define(sym.clone(), Type::Req, Some(Value::Req(req)));
+                                                return Ok(());
+                                            },
+                                            _ => todo!("you can only set a bool to req.hash_always_miss"),
+                                            
+                                        }
+                                    },
+                                    _ => todo!("lol what"),
+                                }
+                            } else {
+                                todo!(":?");
+                            }
+                        }
+                        "hash_ignore_busy" => {
+                            let req = entry.1.clone();
+                            if let Some(req) = req {
+                                match req {
+                                    Value::Req(mut req) => {
+                                        println!("val: {:?}", val);
+                                        match val {
+                                            Value::Bool(val) => {
+                                                req.hash_ignore_busy = *val;
+                                                self.define(sym.clone(), Type::Req, Some(Value::Req(req)));
+                                                return Ok(());
+                                            },
+                                            _ => todo!("you can only set a bool to req.hash_ignore_busy"),
+                                            
+                                        }
+                                    },
+                                    _ => todo!("lol what"),
+                                }
+                            } else {
+                                todo!(":?");
+                            }
+                        }
+                        "max_stale_while_revalidate" => {
+                            let req = entry.1.clone();
+                            if let Some(req) = req {
+                                match req {
+                                    Value::Req(mut req) => {
+                                        println!("val: {:?}", val);
+                                        match val {
+                                            Value::RTime(val) => {
+                                                req.max_stale_while_revalidate = val.clone();
+                                                self.define(sym.clone(), Type::Req, Some(Value::Req(req)));
+                                                return Ok(());
+                                            },
+                                            _ => todo!("you can only set a RTime to req.max_stale_while_revalidate"),
+                                            
+                                        }
+                                    },
+                                    _ => todo!("lol what"),
+                                }
+                            } else {
+                                todo!(":?");
+                            }
+                        }
+                        "method"|"request" => {
+                            let req = entry.1.clone();
+                            if let Some(req) = req {
+                                match req {
+                                    Value::Req(mut req) => {
+                                        println!("val: {:?}", val);
+                                        match val {
+                                            Value::String(val) => {
+                                                req.method = val.clone();
+                                                self.define(sym.clone(), Type::Req, Some(Value::Req(req)));
+                                                return Ok(());
+                                            },
+                                            _ => todo!("you can only set a String to req.method/req.request"),
+                                            
+                                        }
+                                    },
+                                    _ => todo!("lol what"),
+                                }
+                            } else {
+                                todo!(":?");
+                            }
+                        }
+                        "proto" => {
+                            let req = entry.1.clone();
+                            if let Some(req) = req {
+                                match req {
+                                    Value::Req(mut req) => {
+                                        println!("val: {:?}", val);
+                                        match val {
+                                            Value::String(val) => {
+                                                req.proto = val.clone();
+                                                self.define(sym.clone(), Type::Req, Some(Value::Req(req)));
+                                                return Ok(());
+                                            },
+                                            _ => todo!("you can only set a String to req.proto"),
+                                            
+                                        }
+                                    },
+                                    _ => todo!("lol what"),
+                                }
+                            } else {
+                                todo!(":?");
+                            }
+                        }
+                        "url" => {
+                            let req = entry.1.clone();
+                            if let Some(req) = req {
+                                match req {
+                                    Value::Req(mut req) => {
+                                        println!("val: {:?}", val);
+                                        match val {
+                                            Value::String(val) => {
+                                                req.url = val.clone();
+                                                self.define(sym.clone(), Type::Req, Some(Value::Req(req)));
+                                                return Ok(());
+                                            },
+                                            _ => todo!("you can only set a String to req.url"),
+                                            
                                         }
                                     },
                                     _ => todo!("lol what"),
@@ -2189,8 +2409,10 @@ impl Interpreter {
             expr::Literal::False => Value::Bool(false),
             expr::Literal::Float(n) => Value::Float(*n),
             expr::Literal::Integer(n) => Value::Integer(Wrapping(*n)),
-            expr::Literal::Duration(_, _)
-            | expr::Literal::AclEntry(_, _)
+            expr::Literal::Duration(amount, unit) => {
+                Value::RTime(interpret_duration(*amount, unit))
+            }
+            expr::Literal::AclEntry(_, _)
             | expr::Literal::Percent(_) => {
                 todo!()
             }
