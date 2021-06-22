@@ -678,7 +678,7 @@ impl Environment {
                                         println!("val: {:?}", val);
                                         match val {
                                             Value::RTime(val) => {
-                                                req.max_stale_if_error = val.clone();
+                                                req.max_stale_if_error = *val;
                                                 self.define(sym.clone(), Type::Req, Some(Value::Req(req)));
                                                 return Ok(());
                                             },
@@ -744,7 +744,7 @@ impl Environment {
                                         println!("val: {:?}", val);
                                         match val {
                                             Value::RTime(val) => {
-                                                req.max_stale_while_revalidate = val.clone();
+                                                req.max_stale_while_revalidate = *val;
                                                 self.define(sym.clone(), Type::Req, Some(Value::Req(req)));
                                                 return Ok(());
                                             },
