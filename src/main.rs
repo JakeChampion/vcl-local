@@ -10,7 +10,7 @@
 //     )]
 use clap::{App, Arg};
 
-use std::fs;
+use std::{fs, path::Path};
 
 mod expr;
 mod interpreter;
@@ -71,8 +71,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         println!("tokens: {:#?}", tokens);
         std::process::exit(0);
     }
-
-    let program = match parser::parse(tokens) {
+    let directory = Path::new(input_file).parent().unwrap();
+    let program = match parser::parse(tokens, directory) {
         Ok(program) => program,
         Err(err) => {
             println!("parse error: {:?}", err);

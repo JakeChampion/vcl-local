@@ -6,10 +6,13 @@ use crate::{
     scanner::Literal,
 };
 
+use std::fs;
+use std::path::{Path, PathBuf};
 use std::{fmt, str::FromStr};
 
 struct Parser {
     tokens: Vec<scanner::Token>,
+    directory: PathBuf,
     current: usize,
     in_subdec: bool,
     statements: Vec<expr::ABDIST>,
@@ -19,6 +22,7 @@ impl Default for Parser {
     fn default() -> Self {
         Self {
             tokens: Vec::new(),
+            directory: Path::new(".").to_owned(),
             current: 0,
             in_subdec: false,
             statements: Vec::new(),
@@ -171,9 +175,10 @@ pub enum SubKind {
     Function,
 }
 
-pub fn parse(tokens: Vec<scanner::Token>) -> Result<Program, Error> {
+pub fn parse(tokens: Vec<scanner::Token>, directory: &Path) -> Result<Program, Error> {
     let mut p = Parser {
         tokens,
+        directory: directory.to_owned(),
         ..Parser::default()
     };
     let stmts_or_err = p.parse();
@@ -220,11 +225,30 @@ impl Parser {
         // let mut statements: Vec<expr::Stmt> = Vec::new();
 
         while !self.is_at_end() {
-            let stmt = self.declaration()?;
-            self.statements.push(stmt);
+            if self.matches(scanner::TokenType::Include).is_some() {
+                let include = self.include_statement().unwrap();
+                let include = if let expr::Stmt::Include(expr::Literal::String(include)) = include {
+                    include[1..include.len() - 1].to_owned()
+                } else {
+                    todo!()
+                };
+                let include_path = Path::join(&self.directory, include);
+                // println!("{:?}", &include_path);
+                let input = fs::read_to_string(&include_path).expect("Error reading input file");
+                let tokens = scanner::scan_tokens(input).unwrap();
+                self.statements.append(&mut Parser::parse_include(tokens, include_path.parent().unwrap()).unwrap().clone());
+            } else {
+                let stmt = self.declaration()?;
+                self.statements.push(stmt);
+            }
         }
 
         Ok(self.statements.clone())
+    }
+
+    pub fn parse_include(tokens: Vec<scanner::Token>, directory: &Path) -> Result<Vec<expr::ABDIST>, Error> {
+        let program = parse(tokens, directory).unwrap();
+        Ok(program.body)
     }
 
     fn declaration(&mut self) -> Result<expr::ABDIST, Error> {
@@ -844,9 +868,9 @@ impl Parser {
             return self.if_statement();
         }
 
-        if self.matches(scanner::TokenType::Include).is_some() {
-            return self.include_statement();
-        }
+        // if self.matches(scanner::TokenType::Include).is_some() {
+        //     return self.include_statement();
+        // }
 
         if self.matches(scanner::TokenType::Log).is_some() {
             return self.log_statement();
