@@ -75,6 +75,15 @@ AST: Program {
 }
 ```
 
+## Performance
+
+```
+❯ hyperfine "./target/release/vcl-local examples/polyfill/main.vcl --syntax-check" --runs 1000
+Benchmark #1: ./target/release/vcl-local examples/polyfill/main.vcl --syntax-check
+  Time (mean ± σ):      33.1 ms ±  32.4 ms    [User: 26.0 ms, System: 4.4 ms]
+  Range (min … max):    27.0 ms … 1041.8 ms    1000 runs
+```
+
 ## TODO
 
 ### Scanner
